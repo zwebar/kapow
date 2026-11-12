@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kapow snapshots</title>
+<style>
+  /*FONT*/
+  body { margin: 0; padding: 16px; background: #14121a; color: #e8e2d4; font: 13px system-ui, sans-serif; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  p { margin: 0 0 14px; color: #9a94a8; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; }
+  figure { margin: 0; }
+  canvas { width: 100%; display: block; border-radius: 6px; }
+  figcaption { padding: 4px 2px; color: #9a94a8; }
+</style>
+</head>
+<body>
+<h1>Kapow: what the addon draws</h1>
+<p>Painted from the layout the addon's real Lua builds in the test mock, at moments of <code>/kapow test</code>.
+Positions, sizes, colours and layering are the addon's; the font metrics and pop-in animations are approximate.</p>
+<div class="grid" id="grid"></div>
+<script>
+const IMAGES = "@@IMAGES@@";
+const SHOTS = "@@SHOTS@@";
+// the window of the 1280x720 UI that is shown, in UI units (y measured from the bottom)
+const VIEW = { x: 290, y: 60, w: 700, h: 300 };
+const Z = 2;
+
+const imgs = {};
+const load = Object.entries(IMAGES).map(([k, src]) => new Promise((res) => {
+  const im = new Image();
+  im.onload = () => { imgs[k] = im; res(); };
+  im.src = src;
+}));
+
+const tintCache = new Map();
+function tinted(art, tint) {
+  const key = art + tint.map((v) => v.toFixed(2)).join(',');
+  if (tintCache.has(key)) return tintCache.get(key);
+  const im = imgs[art];
+  const c = document.createElement('canvas');
+  c.width = im.width; c.height = im.height;
+  const g = c.getContext('2d');
+  g.drawImage(im, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = `rgb(${tint.map((v) => Math.round(v * 255)).join(',')})`;
+  g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'destination-in';
+  g.drawImage(im, 0, 0);
+  tintCache.set(key, c);
+  return c;
+}
+const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
+const X = (x) => (x - VIEW.x) * Z;
+const Y = (y, h) => (VIEW.h - (y - VIEW.y) - h) * Z; // top edge in canvas pixels
+
+function drawTex(g, it) {
+  const x = X(it.x), y = Y(it.y, it.h), w = it.w * Z, h = it.h * Z;
+  g.save();
+  g.globalAlpha = Math.max(0, Math.min(1, it.a));
+  g.globalCompositeOperation = it.blend === 'ADD' ? 'lighter' : 'source-over';
+  g.translate(x + w / 2, y + h / 2);
+  if (it.rot) g.rotate(-it.rot);
+  if (it.color || it.art === 'white' || it.art === 'icon' || !imgs[it.art]) {
+    let c = it.color || [1, 1, 1];
+    if (it.art === 'icon') c = [0.35, 0.3, 0.45];
+    g.fillStyle = css(c.map((v, i) => v * it.tint[i]));
+    g.fillRect(-w / 2, -h / 2, w, h);
+  } else {
+    const src = tinted(it.art, it.tint);
+    const crop = it.crop === undefined ? 1 : it.crop;
+    g.drawImage(src, 0, 0, src.width * crop, src.height, -w / 2, -h / 2, w, h);
+  }
+  g.restore();
+}
+
+function draw(canvas, shot) {
+  canvas.width = VIEW.w * Z; canvas.height = VIEW.h * Z;
+  const g = canvas.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, canvas.width, canvas.height);
+  bg.addColorStop(0, '#46553a'); bg.addColorStop(0.55, '#2c3626'); bg.addColorStop(1, '#1b2016');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  for (const it of shot.items) {
+    if (it.kind === 'tex') {
+      if (it.mask && imgs[it.mask.art]) {
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width; tmp.height = canvas.height;
+        const tg = tmp.getContext('2d');
+        drawTex(tg, it);
+        tg.globalCompositeOperation = 'destination-in';
+        tg.drawImage(imgs[it.mask.art], X(it.mask.x), Y(it.mask.y, it.mask.h), it.mask.w * Z, it.mask.h * Z);
+        g.drawImage(tmp, 0, 0);
+      } else {
+        drawTex(g, it);
+      }
+    } else {
+      const size = it.size * Z;
+      g.save();
+      g.globalAlpha = Math.max(0, Math.min(1, it.a));
+      g.font = `${size}px hud, Impact, sans-serif`;
+      g.textBaseline = 'middle';
+      const cy = Y(it.y, it.h) + it.h * Z / 2;
+      const ax = it.align === 'left' ? X(it.x) : it.align === 'right' ? X(it.x + it.w) : X(it.x + it.w / 2);
+      const tw = g.measureText(it.text).width;
+      const cx = it.align === 'left' ? ax + tw / 2 : it.align === 'right' ? ax - tw / 2 : ax;
+      g.translate(cx, cy);
+      if (it.rot) g.rotate(-it.rot);
+      g.textAlign = 'center';
+      const outline = it.flags.includes('THICK') ? 0.2 : it.flags.includes('OUTLINE') ? 0.1 : 0;
+      if (outline) {
+        g.lineJoin = 'round';
+        g.lineWidth = Math.max(2, size * outline);
+        g.strokeStyle = '#000';
+        g.strokeText(it.text, 0, 0);
+      }
+      g.fillStyle = css(it.color);
+      g.fillText(it.text, 0, 0);
+      g.restore();
+    }
+  }
+}
+
+Promise.all(load).then(() => (document.fonts ? document.fonts.load('20px hud').catch(() => {}) : null)).then(() => {
+  const grid = document.getElementById('grid');
+  for (const shot of SHOTS) {
+    const fig = document.createElement('figure');
+    const c = document.createElement('canvas');
+    const cap = document.createElement('figcaption');
+    cap.textContent = shot.label;
+    fig.append(c, cap);
+    grid.append(fig);
+    draw(c, shot);
+  }
+  document.title = 'Kapow snapshots (' + SHOTS.length + ')';
+});
+</script>
+</body>
+</html>

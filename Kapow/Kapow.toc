@@ -1,0 +1,14 @@
+## Interface: 16001
+## Title: Kapow |cffffd23f- Rogue comic HUD|r
+## Notes: A comic-book HUD for rogues: energy cells, combo pips, and POW! bursts for kicks, saps, gouges and finishers.
+## Version: 1.0.0
+## IconTexture: Interface\Icons\Ability_Rogue_Eviscerate
+## SavedVariables: KapowDB
+
+Core.lua
+FX.lua
+HUD.lua
+Timers.lua
+Spells.lua
+Tracker.lua
+Demo.lua
