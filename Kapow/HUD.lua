@@ -162,33 +162,6 @@ function HUD:Build()
     ct:Hide()
     self.comboText = ct
 
-    -- FULL! badge at the right end
-    local full = CreateFrame("Frame", nil, body)
-    full:SetSize(10, 10)
-    full:SetPoint("CENTER", body, "CENTER", CellX(CELLS) + CELL_W / 2 + 22, CELL_Y + 4)
-    full:SetFrameLevel(base + 6)
-    full.shadow = K.Tex(full, "BACKGROUND", "burst", 66, 50)
-    full.shadow:SetPoint("CENTER", 3, -4)
-    full.shadow:SetVertexColor(0, 0, 0, 0.5)
-    full.shape = K.Tex(full, "BORDER", "burst", 66, 50)
-    full.shape:SetPoint("CENTER")
-    K.Tint(full.shape, C.red)
-    full.text = K.Text(full, "OVERLAY", 13, "OUTLINE")
-    full.text:SetPoint("CENTER", 0, 0)
-    full.text:SetText("FULL!")
-    full.text:SetRotation(-0.1)
-    local pulse = full:CreateAnimationGroup()
-    pulse:SetLooping("BOUNCE")
-    local pa = pulse:CreateAnimation("Scale")
-    pa:SetDuration(0.32)
-    pa:SetScaleFrom(1, 1)
-    pa:SetScaleTo(1.14, 1.14)
-    pa:SetOrigin("CENTER", 0, 0)
-    pa:SetSmoothing("IN_OUT")
-    full.pulse = pulse
-    full:Hide()
-    self.fullBadge = full
-
     -- Prompt: a comic cast bar. A yellow caption tab on top says what to do (KICK IT!); the bar
     -- below carries the spell's icon and name and fills as the cast goes on; a HEAL! burst sits
     -- on its right end when the spell is a heal.
@@ -406,7 +379,6 @@ function HUD:CellCross(prev, value)
         local edge = i * seg - 0.5
         if prev < edge and value >= edge then
             FlashCell(self.cells[i], C.white, 0.85, 0.3)
-            K.FX:Sparks(self.cells[i].x, CELL_Y, C.yellow, 3, 26)
         end
     end
 end
@@ -433,11 +405,8 @@ function HUD:Refill(amount, value)
     end
 end
 
+-- Spending is already shown by the cells draining; the number just bumps.
 function HUD:Spend(cost)
-    if cost and cost > 0 then
-        K.FX:Pop("-" .. math.floor(cost + 0.5), CellX(1) - CELL_W / 2 - 22, CELL_Y - 24, C.red, 13, -16)
-    end
-    self:Shake(2.5, 0.16)
     self:ExpectSpend()
     self:BumpNumber()
 end
@@ -464,21 +433,9 @@ function HUD:Error()
     end
 end
 
-function HUD:SetFull(full, celebrate)
-    if full == self.full then return end
+-- Only remembered: nothing is drawn for "full".
+function HUD:SetFull(full)
     self.full = full
-    local badge = self.fullBadge
-    if full then
-        badge:Show()
-        badge.pulse:Play()
-        if celebrate then
-            for i = 1, CELLS do FlashCell(self.cells[i], C.white, 0.7, 0.35) end
-            K.FX:Ring(0, CELL_Y, C.yellow, 60, 200, 0.35)
-        end
-    else
-        badge.pulse:Stop()
-        badge:Hide()
-    end
 end
 
 local function Color(c)
@@ -627,8 +584,7 @@ function HUD:SetCombo(n, quiet)
                     pip.tween = K.Tween(0.3, function(p)
                         PipSize(pip, 0.35 + 0.65 * K.Ease.outBack(p))
                     end)
-                    K.FX:Ring(pip.x, PIP_Y, c, 14, 58, 0.28)
-                    K.FX:Sparks(pip.x, PIP_Y, c, 4, 24)
+                    K.FX:Ring(pip.x, PIP_Y, c, 14, 50, 0.28)
                 end
             else
                 K.Tint(pip.tex, EMPTY)
@@ -638,15 +594,13 @@ function HUD:SetCombo(n, quiet)
                     -- spent: the pip bursts, one after another
                     local c, x = pip.color, pip.x
                     K.After((i - 1) * 0.035, function()
-                        K.FX:Sparks(x, PIP_Y, c, 5, 34)
-                        K.FX:Ring(x, PIP_Y, c, 20, 70, 0.25)
+                        K.FX:Ring(x, PIP_Y, c, 20, 60, 0.25)
                     end)
                 end
             end
         end
     end
     if n >= CELLS and was < CELLS and not quiet then
-        K.FX:Lines(PipX(3), PIP_Y, C.red, 170, 0.5)
         K.FX:Pop("MAX!", PipX(CELLS) + 34, PIP_Y + 2, C.red, 17, 16)
     end
     if n >= CELLS and was < CELLS and loud then self:Shake(3, 0.2) end
@@ -712,16 +666,18 @@ function HUD:OnUpdate(dt, now)
     end
     self.glowing = self.combo and self.combo >= CELLS
 
-    -- fade when idle
-    local busy = K.demo or self.inCombat or self.stealth or self.hasTarget or not K.db.locked
-        or self.full == false or (K.Timers.count or 0) > 0 or (self.combo or 0) > 0
-    local target = busy and 1 or (K.db.idle or 0.35)
+    -- Shown in combat only (and for the demo, or while unlocked). It stays up for a moment
+    -- after combat so the last burst (K.O.!) can finish. /kapow idle sets the opacity out of
+    -- combat; 0, the default, hides it.
+    if self.inCombat then self.lastCombat = now end
+    local busy = K.demo or self.inCombat or not K.db.locked
+        or (self.lastCombat ~= nil and now - self.lastCombat < 2)
+    local target = busy and 1 or (K.db.idle or 0)
     if self.alpha ~= target then
-        local step = dt * 3
         if self.alpha < target then
-            self.alpha = math.min(target, self.alpha + step)
+            self.alpha = math.min(target, self.alpha + dt * 8) -- pop up at once on a pull
         else
-            self.alpha = math.max(target, self.alpha - step)
+            self.alpha = math.max(target, self.alpha - dt * 2)
         end
         self.root:SetAlpha(self.alpha)
     end

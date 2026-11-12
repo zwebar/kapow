@@ -52,24 +52,23 @@ end
 local Show = {}
 T.Show = Show
 
+-- These are what happened, so they show on the right; your own abilities show on the left.
 function Show.Crit(amount)
-    local x, y = FX:Word("CRIT!", { color = C.red, shape = "burst2", size = 1.0, sub = amount, textColor = C.yellow })
-    if x then FX:Sparks(x, y, C.yellow, 5, 44) end
-    HUD:Shake(3, 0.18)
+    FX:Word("CRIT!", { side = 1, color = C.red, shape = "burst2", size = 1.0, sub = amount, textColor = C.yellow })
 end
 
 function Show.Miss(word)
-    FX:Word(word, { color = C.grey, shape = "cloud", size = 0.72, textColor = C.paper, hold = 0.3 })
+    FX:Word(word, { side = 1, color = C.grey, shape = "cloud", size = 0.8, textColor = C.paper, hold = 0.7 })
 end
 
 function Show.Denied()
-    local x, y = FX:Word("DENIED!", { color = C.red, shape = "burst2", size = 1.1, textColor = C.yellow, hold = 0.55 })
+    local x, y = FX:Word("DENIED!", { side = 1, color = C.red, shape = "burst2", size = 1.1, textColor = C.yellow, hold = 1.1 })
     if x then FX:Flourish(x, y, C.cyan, 1) end
     HUD:Shake(4, 0.22)
 end
 
 function Show.KO()
-    local x, y = FX:Word("K.O.!", { color = C.yellow, shape = "burst2", size = 1.15, textColor = C.red, hold = 0.6 })
+    local x, y = FX:Word("K.O.!", { side = 1, color = C.yellow, shape = "burst2", size = 1.15, textColor = C.red, hold = 1.2 })
     if x then FX:Flourish(x, y, C.yellow, 1) end
 end
 
@@ -77,7 +76,7 @@ end
 -- Energy
 --------------------------------------------------------------------------------
 local function SetFull(full)
-    HUD:SetFull(full, HUD.inCombat)
+    HUD:SetFull(full)
 end
 
 -- Energy either arrives in two-second ticks or trickles in continuously. Gains that keep
@@ -189,26 +188,20 @@ end
 --------------------------------------------------------------------------------
 -- Your casts
 --------------------------------------------------------------------------------
-local slashSide = 1
-
 local function Announce(def, cp)
     if not K.db.words then return end
     local size, big, sub, hold = def.size or 1, def.big, def.sub, nil
     if def.finisher then
         size = 0.8 + 0.06 * cp
         big = cp >= 5
-        hold = 0.55
+        hold = 1.1
         if cp > 0 then sub = cp .. (cp == 1 and " POINT" or " POINTS") end
     end
     local x, y = FX:Word(def.word, {
-        color = def.color, size = size, shape = def.shape, big = big, sub = sub,
+        side = -1, color = def.color, size = size, shape = def.shape, sub = sub,
         textColor = def.textColor, hold = hold,
     })
     if not x then return end
-    if def.slash then
-        slashSide = -slashSide
-        FX:Slash(x, y - 2, C.white, slashSide * (0.35 + math.random() * 0.4), (110 * size + 50) * (K.db.fx or 1))
-    end
     if big then
         FX:Flourish(x, y, def.color, 1)
         HUD:Shake(4, 0.24)

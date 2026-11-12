@@ -17,14 +17,17 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
 - **Energy** – five slanted cells and a big number. Spent energy lingers as a pale chunk before
   it drains. Regeneration is kept quiet: the number moves in calm steps and a tick only gives a
   soft flash. A bolt runs along the line under the cells, from left to right every two seconds,
-  arriving as the next energy tick lands (it hides if energy trickles in instead of ticking). A
-  `FULL!` badge nags you when you are capped; not enough energy shakes the HUD red.
+  arriving as the next energy tick lands (it hides if energy trickles in instead of ticking).
+  Not enough energy shakes the HUD red.
 - **Combo points** – an arc of diamond pips above your target's nameplate. They pop in one by
   one, throb at five (`MAX!`), and burst when you spend them. If the target has no nameplate
   (nameplates off, or hidden from addons), the pips show on the HUD instead.
 - **Ability bursts** – `SLASH!`, `STAB!`, `AMBUSH!`, `GOUGE!`, `KICK!`, `SAP! z z z`, `POOF!`…
-  Finishers grow with the points spent (`EVISCERATE! 5 POINTS`). Bursts pop up to the left and
-  right, a little above the HUD: never over the middle of the screen or the unit frames.
+  Finishers grow with the points spent (`EVISCERATE! 5 POINTS`). Each burst holds still for
+  about a second in a fixed spot a little above the HUD: what you cast on the left, what
+  happened (`CRIT!`, `DODGED!`, `DENIED!`, `K.O.!`) on the right. A new word replaces the old one
+  on its side, so they never pile up, and nothing covers the middle of the screen or the unit
+  frames.
 - **Hits** (solo only) – `CRIT!` with the number, `DODGED!`, `PARRIED!`, `MISS!`, and `K.O.!`
   when the target drops.
 - **Kick** – `KICK IT!` flashes while your target is casting something you can kick. With Kick
@@ -36,7 +39,8 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,
   Sprint, Evasion and friends on you, and short cooldowns (`KICK 7.2`, then `KICK READY!`).
   A parry puts up a `RIPOSTE!` box.
-- Turns purple while you are stealthed, and fades when nothing is going on.
+- Turns purple while you are stealthed. Only shown in combat: it pops up on a pull and fades
+  out two seconds after combat ends.
 
 ## Install
 
@@ -57,7 +61,7 @@ timer, where combo points show and how high the arc sits, the word bursts and th
 | `/kapow test` | play a 15-second pretend fight, to see every effect |
 | `/kapow unlock` / `lock` | drag the HUD somewhere else |
 | `/kapow scale 1.2` | resize (0.5 – 2.5) |
-| `/kapow idle 0.35` | opacity when nothing is happening (0 hides it) |
+| `/kapow idle 0.35` | opacity out of combat (default 0: hidden) |
 | `/kapow fx 0.8` | size of the word bursts (0.5 – 1.5) |
 | `/kapow pips plate` / `hud` / `both` | where combo points show |
 | `/kapow arc 10` | how high the arc sits above the nameplate |

@@ -1,5 +1,5 @@
--- FX: the comic effects. Word bursts (POW!), small floating pops (+20), rings, sparks,
--- speed lines and slashes. Everything is positioned relative to the centre of the HUD.
+-- FX: the comic effects. Word bursts (POW!), small floating pops, rings, sparks and speed
+-- lines. Everything is positioned relative to the centre of the HUD.
 local _, K = ...
 local FX = {}
 K.FX = FX
@@ -7,11 +7,15 @@ local C = K.C
 
 -- Word bursts land to the left and right, a little above the HUD: clear of the middle of the
 -- screen (your character and your target) and of the unit frames lower down at the sides.
--- Each slot: side (-1 left, 1 right), how far its inner edge sits from the HUD's centre, height.
-local WORD_SLOTS = { { -1, 170, 120 }, { 1, 178, 124 }, { -1, 194, 168 }, { 1, 202, 172 }, { -1, 178, 214 }, { 1, 186, 218 } }
+-- There is one fixed spot on each side, so you always know where to look: left for what you
+-- did (SLASH!, KICK!), right for what happened (CRIT!, DODGED!, K.O.!). A new word replaces the
+-- one on its side instead of piling up.
+local WORD_EDGE, WORD_Y = 175, 150 -- inner edge's distance from the HUD's centre, height
+local WORD_FONT = 30              -- lettering size at size 1
 
 local words, pops, sprites = {}, {}, {}
-local slot, seq = 0, 0
+local current = {} -- side -> the word showing there
+local seq = 0
 
 function FX:Build()
     self.layer = K.HUD.fx
@@ -45,45 +49,46 @@ local function NewWord()
 
     local pop = ag:CreateAnimation("Scale")
     pop:SetOrder(1)
-    pop:SetDuration(0.11)
-    pop:SetScaleFrom(0.2, 0.2)
-    pop:SetScaleTo(1.22, 1.22)
+    pop:SetDuration(0.12)
+    pop:SetScaleFrom(0.4, 0.4)
+    pop:SetScaleTo(1.12, 1.12)
     pop:SetOrigin("CENTER", 0, 0)
     pop:SetSmoothing("OUT")
 
     local settle = ag:CreateAnimation("Scale")
     settle:SetOrder(2)
-    settle:SetDuration(0.09)
-    settle:SetScaleFrom(1.22, 1.22)
+    settle:SetDuration(0.1)
+    settle:SetScaleFrom(1.12, 1.12)
     settle:SetScaleTo(1, 1)
     settle:SetOrigin("CENTER", 0, 0)
     settle:SetSmoothing("IN_OUT")
 
     local fade = ag:CreateAnimation("Alpha")
     fade:SetOrder(3)
-    fade:SetDuration(0.22)
+    fade:SetDuration(0.3)
     fade:SetFromAlpha(1)
     fade:SetToAlpha(0)
 
     local drift = ag:CreateAnimation("Translation")
     drift:SetOrder(3)
-    drift:SetDuration(0.22)
-    drift:SetOffset(0, 22)
+    drift:SetDuration(0.3)
+    drift:SetOffset(0, 8)
     drift:SetSmoothing("IN")
 
-    local grow = ag:CreateAnimation("Scale")
-    grow:SetOrder(3)
-    grow:SetDuration(0.22)
-    grow:SetScaleFrom(1, 1)
-    grow:SetScaleTo(1.12, 1.12)
-    grow:SetOrigin("CENTER", 0, 0)
-
-    f.ag, f.tail = ag, { fade, drift, grow }
+    f.ag, f.tail = ag, { fade, drift }
     ag:SetScript("OnFinished", function()
         f:Hide()
         f.busy = false
+        if current[f.side] == f then current[f.side] = nil end
     end)
     return f
+end
+
+local function DropWord(f)
+    f.ag:Stop()
+    f:Hide()
+    f.busy = false
+    if current[f.side] == f then current[f.side] = nil end
 end
 
 local function AcquireWord()
@@ -96,7 +101,7 @@ local function AcquireWord()
         for i = 2, #words do
             if words[i].born < oldest.born then oldest = words[i] end
         end
-        oldest.ag:Stop()
+        DropWord(oldest)
         return oldest
     end
     local f = NewWord()
@@ -104,17 +109,22 @@ local function AcquireWord()
     return f
 end
 
--- FX:Word("KICK!", { color = C.cyan, size = 1, shape = "burst", sub = "412", hold = 0.45 })
+-- FX:Word("KICK!", { color = C.cyan, size = 1, shape = "burst", sub = "412", hold = 0.9, side = -1 })
+-- side: -1 (left, the default) for your own abilities, 1 (right) for what happened.
 function FX:Word(text, o)
     if not self.layer then return end
     o = o or {}
+    local side = (o.side == 1) and 1 or -1
+    if current[side] then DropWord(current[side]) end
     local f = AcquireWord()
     f.busy = true
+    f.side = side
+    current[side] = f
     seq = seq + 1
     f.born = seq
 
     local size = o.size or 1
-    local font = math.floor(21 * size + 0.5)
+    local font = math.floor(WORD_FONT * size + 0.5)
     SetFontSize(f.text, font)
     SetFontSize(f.back, font)
     f.text:SetText(text)
@@ -123,6 +133,7 @@ function FX:Word(text, o)
     f.text:SetTextColor(tc[1], tc[2], tc[3])
 
     if o.sub then
+        SetFontSize(f.sub, math.floor(17 * math.max(size, 0.9) + 0.5), "OUTLINE")
         f.sub:SetText(o.sub)
         f.sub:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
         f.sub:Show()
@@ -131,8 +142,8 @@ function FX:Word(text, o)
     end
 
     local w = math.max(f.text:GetStringWidth() or 0, #text * font * 0.42)
-    local sw = math.max(w * 1.4 + 30, 84 * size)
-    local sh = math.max(font * 3.0, sw * 0.6) + (o.sub and 12 or 0)
+    local sw = math.max(w * 1.3 + 36, 110 * size)
+    local sh = math.max(font * 2.6, sw * 0.55) + (o.sub and 18 or 0)
     local art = K.ART .. (o.shape or "burst")
     f.shape:SetTexture(art)
     f.shadow:SetTexture(art)
@@ -140,43 +151,30 @@ function FX:Word(text, o)
     f.shadow:SetSize(sw, sh)
     K.Tint(f.shape, o.color or C.yellow)
 
-    local tilt = o.tilt or ((math.random() * 2 - 1) * 0.13)
+    -- A steady lean towards the middle: no wobble, so the word can be read at a glance.
+    local tilt = o.tilt or (-side * 0.06)
     f.text:SetRotation(tilt)
     f.back:SetRotation(tilt)
+    f.shape:SetRotation(-side * 0.08)
+    f.shadow:SetRotation(-side * 0.08)
 
     -- /kapow fx: the whole burst can be made smaller or larger. Offsets are in the frame's
     -- own scale, hence the division below.
     local s = K.db.fx or 1
-    slot = slot % #WORD_SLOTS + 1
-    local side, edge, height = WORD_SLOTS[slot][1], WORD_SLOTS[slot][2], WORD_SLOTS[slot][3]
     -- placed by its inner edge, so a wide burst grows outward instead of over the HUD
-    local x = side * (edge + sw * s / 2 + math.random() * 8)
-    local y = height + (math.random() * 2 - 1) * 6
+    local x = side * (WORD_EDGE + sw * s / 2)
+    local y = WORD_Y
     f:SetScale(s)
     f:ClearAllPoints()
     f:SetPoint("CENTER", self.layer, "CENTER", x / s, y / s)
     f:SetFrameLevel(self.layer:GetFrameLevel() + 1 + (seq % 30))
 
-    local hold = o.hold or 0.42
+    local hold = o.hold or 0.9
     for i = 1, #f.tail do f.tail[i]:SetStartDelay(hold) end
     f.ag:Stop()
     f:SetAlpha(1)
     f:Show()
     f.ag:Play()
-
-    -- "Boiling" outline: the burst jitters between two angles while it is up.
-    K.Cancel(f.boil)
-    local total, last = 0.2 + hold + 0.22, -1
-    local base = (math.random() * 2 - 1) * 0.2
-    f.boil = K.Tween(total, function(p)
-        local n = math.floor(p * total / 0.085)
-        if n ~= last then
-            last = n
-            local r = base + ((n % 2 == 0) and 0.05 or -0.05)
-            f.shape:SetRotation(r)
-            f.shadow:SetRotation(r)
-        end
-    end)
     return x, y
 end
 
@@ -336,22 +334,6 @@ function FX:Lines(x, y, color, size, dur)
         t:SetSize(s, s)
         t:SetRotation(r0 + p * 0.5)
         t:SetAlpha(0.6 * math.sin(p * math.pi))
-    end, function() Release(t) end)
-end
-
--- A blade streak.
-function FX:Slash(x, y, color, angle, length)
-    if not self.layer then return end
-    local t = Sprite("streak")
-    if not t then return end
-    K.Tint(t, color or C.white)
-    Place(t, x, y)
-    t:SetRotation(angle or 0.5)
-    length = length or 170
-    K.Tween(0.26, function(p)
-        local s = length * (0.35 + 0.65 * K.Ease.outCubic(math.min(1, p * 2.2)))
-        t:SetSize(s, s)
-        t:SetAlpha(p < 0.45 and 1 or (1 - (p - 0.45) / 0.55))
     end, function() Release(t) end)
 end
 

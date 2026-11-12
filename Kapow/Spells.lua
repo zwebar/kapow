@@ -6,25 +6,24 @@ K.Spells = S
 local C = K.C
 
 --   word/color/size/shape  the burst shown when you use it
---   slash                  draw a blade streak too
 --   finisher               spends combo points (the burst grows with the points spent)
 --   cd, short              show a cooldown box (only for short cooldowns worth watching)
 --   aura = { unit, kind, short, dur }  show a countdown box; dur is our best guess in
 --                          seconds (or a function of combo points and spell id) and is
 --                          replaced by the real duration whenever the game lets us read it
 S.list = {
-    { key = "sinister", id = 1752,  word = "SLASH!",  color = C.yellow, size = 0.72, slash = true },
-    { key = "backstab", id = 53,    word = "STAB!",   color = C.orange, size = 0.85, slash = true },
-    { key = "hemo",     id = 16511, word = "SLICE!",  color = C.red,    size = 0.75, slash = true },
-    { key = "ghostly",  id = 14278, word = "GHOST!",  color = C.cyan,   size = 0.8,  slash = true },
-    { key = "riposte",  id = 14251, word = "RIPOSTE!", color = C.cyan,  size = 0.95, slash = true },
-    { key = "ambush",   id = 8676,  word = "AMBUSH!", color = C.red,    size = 1.15, shape = "burst2", big = true, slash = true },
+    { key = "sinister", id = 1752,  word = "SLASH!",  color = C.yellow, size = 0.72 },
+    { key = "backstab", id = 53,    word = "STAB!",   color = C.orange, size = 0.85 },
+    { key = "hemo",     id = 16511, word = "SLICE!",  color = C.red,    size = 0.75 },
+    { key = "ghostly",  id = 14278, word = "GHOST!",  color = C.cyan,   size = 0.8 },
+    { key = "riposte",  id = 14251, word = "RIPOSTE!", color = C.cyan,  size = 0.95 },
+    { key = "ambush",   id = 8676,  word = "AMBUSH!", color = C.red,    size = 1.15, shape = "burst2", big = true },
     { key = "garrote",  id = 703,   word = "GARROTE!", color = C.pink,  size = 1.0,
       aura = { unit = "target", kind = "dot", short = "GARROTE", dur = 18 } },
     { key = "cheap",    id = 1833,  word = "CHEAP SHOT!", color = C.orange, size = 1.0,
       aura = { unit = "target", kind = "cc", short = "STUNNED", dur = 4 } },
 
-    { key = "evis",     id = 2098,  word = "EVISCERATE!", color = C.red, finisher = true, shape = "burst2", slash = true },
+    { key = "evis",     id = 2098,  word = "EVISCERATE!", color = C.red, finisher = true, shape = "burst2" },
     { key = "kidney",   id = 408,   word = "KIDNEY SHOT!", color = C.orange, finisher = true, cd = 20, short = "KIDNEY",
       aura = { unit = "target", kind = "cc", short = "STUNNED", dur = function(cp, id) return cp + (id == 408 and 0 or 1) end } },
     { key = "snd",      id = 5171,  word = "SLICE & DICE!", color = C.teal, finisher = true,

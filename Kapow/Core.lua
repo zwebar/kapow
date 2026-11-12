@@ -27,7 +27,7 @@ local DEFAULTS = {
     x = 0, y = -190,   -- offset from the centre of the screen
     scale = 1,
     locked = true,
-    idle = 0.35,       -- HUD opacity when nothing is going on
+    idle = 0,          -- HUD opacity out of combat (0: hidden)
     fx = 1,            -- size of the word bursts
     ticker = true,     -- the bolt under the cells that counts down to the next energy tick
     pips = "plate",    -- combo points: "plate" (arc on the target's nameplate), "hud" or "both"
@@ -183,6 +183,12 @@ end
 --------------------------------------------------------------------------------
 local function InitDB()
     KapowDB = KapowDB or {}
+    -- v2: the HUD hides out of combat. Settings saved before then still hold the old 0.35
+    -- default for idle; move that one to the new default, keep any other value chosen.
+    if (KapowDB.v or 1) < 2 then
+        if KapowDB.idle == 0.35 then KapowDB.idle = nil end
+        KapowDB.v = 2
+    end
     for k, v in pairs(DEFAULTS) do
         if KapowDB[k] == nil then KapowDB[k] = v end
     end
@@ -310,7 +316,7 @@ SlashCmdList["KAPOW"] = function(msg)
         K.Print("  /kapow options - open the options page")
         K.Print("  /kapow test - play a demo of every effect")
         K.Print("  /kapow unlock | lock - move the HUD")
-        K.Print("  /kapow scale 1.2 - resize   /kapow idle 0.35 - opacity out of combat")
+        K.Print("  /kapow scale 1.2 - resize   /kapow idle 0.35 - opacity out of combat (0 hides it)")
         K.Print("  /kapow fx 0.8 - size of the word bursts")
         K.Print("  /kapow pips plate | hud | both - where combo points show   /kapow arc 10 - arc height")
         K.Print("  /kapow words | hits | prompt | ticker - toggle ability words, CRIT!/DODGED!, KICK IT!, tick timer")
