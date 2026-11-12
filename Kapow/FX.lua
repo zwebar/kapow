@@ -7,10 +7,11 @@ local C = K.C
 
 -- Word bursts land to the left and right, a little above the HUD: clear of the middle of the
 -- screen (your character and your target) and of the unit frames lower down at the sides.
--- There is one fixed spot on each side, so you always know where to look: left for what you
--- did (SLASH!, KICK!), right for what happened (CRIT!, DODGED!, K.O.!). A new word replaces the
--- one on its side instead of piling up.
+-- There is one spot on each side, so you always know where to look: left for what you did
+-- (SLASH!, KICK!), right for what happened (CRIT!, DODGED!, K.O.!). A new word replaces the one
+-- on its side instead of piling up.
 local WORD_EDGE, WORD_Y = 175, 150 -- inner edge's distance from the HUD's centre, height
+local WORD_JITTER_X, WORD_JITTER_Y = 26, 22 -- how far a burst may stray from its spot
 local WORD_FONT = 30              -- lettering size at size 1
 
 local words, pops, sprites = {}, {}, {}
@@ -151,19 +152,22 @@ function FX:Word(text, o)
     f.shadow:SetSize(sw, sh)
     K.Tint(f.shape, o.color or C.yellow)
 
-    -- A steady lean towards the middle: no wobble, so the word can be read at a glance.
-    local tilt = o.tilt or (-side * 0.06)
+    -- A lean towards the middle with a little variety, but no wobble while it is up, so the
+    -- word can still be read at a glance.
+    local tilt = o.tilt or (-side * 0.06 + (math.random() * 2 - 1) * 0.05)
     f.text:SetRotation(tilt)
     f.back:SetRotation(tilt)
-    f.shape:SetRotation(-side * 0.08)
-    f.shadow:SetRotation(-side * 0.08)
+    local lean = -side * 0.08 + (math.random() * 2 - 1) * 0.08
+    f.shape:SetRotation(lean)
+    f.shadow:SetRotation(lean)
 
     -- /kapow fx: the whole burst can be made smaller or larger. Offsets are in the frame's
     -- own scale, hence the division below.
     local s = K.db.fx or 1
-    -- placed by its inner edge, so a wide burst grows outward instead of over the HUD
-    local x = side * (WORD_EDGE + sw * s / 2)
-    local y = WORD_Y
+    -- Placed by its inner edge, so a wide burst grows outward instead of over the HUD, and
+    -- nudged around its side's spot so it does not land in exactly the same place each time.
+    local x = side * (WORD_EDGE + math.random() * WORD_JITTER_X + sw * s / 2)
+    local y = WORD_Y + (math.random() * 2 - 1) * WORD_JITTER_Y
     f:SetScale(s)
     f:ClearAllPoints()
     f:SetPoint("CENTER", self.layer, "CENTER", x / s, y / s)
@@ -242,7 +246,7 @@ function FX:Pop(text, x, y, color, size, rise)
     f.back:SetRotation(tilt)
     f.rise:SetOffset(0, rise or 24)
     f:ClearAllPoints()
-    f:SetPoint("CENTER", self.layer, "CENTER", x, y)
+    f:SetPoint("CENTER", self.layer, "CENTER", x + (math.random() * 2 - 1) * 8, y + (math.random() * 2 - 1) * 5)
     f.ag:Stop()
     f:SetAlpha(1)
     f:Show()

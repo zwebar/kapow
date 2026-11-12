@@ -13,7 +13,7 @@ local PIP = 27
 local LAG = 0.35 -- how long the pale "just spent" chunk lingers
 local PROMPT_W, PROMPT_H, PROMPT_Y = 210, 28, PIP_Y + 44
 local CAP_H, CAP_OVERLAP = 22, 3 -- the caption tab, and how far it overlaps the bar
-local NUM_EVERY = 0.25 -- while energy regenerates, the number changes at most this often
+local NUM_EVERY = 1 -- while energy regenerates, the number changes at most this often (seconds)
 local NUM_FAST = 0.5 -- after you spend, it follows every change for this long
 
 HUD.CELL_Y, HUD.PIP_Y, HUD.CHIP_Y = CELL_Y, PIP_Y, -52
