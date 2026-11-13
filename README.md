@@ -29,8 +29,9 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
   on its side, so they never pile up, and nothing covers the middle of the screen or the unit
   frames.
 - **Hits** (solo only) – crits are loud: a big `CRIT!` burst with the number in large yellow
-  figures, stars and a jolt. Ordinary hits are kept quiet: a small ink-outlined number that
-  drifts up and fades just right of the HUD (`/kapow dmg` turns them off). Also `DODGED!`,
+  figures, and a jolt. Ordinary hits are kept quiet: a small ink-outlined number that
+  drifts up and fades (`/kapow dmg` turns them off). Both show over your target, just above its
+  nameplate where the game's own combat numbers go (in the middle of the screen without one). Also `DODGED!`,
   `PARRIED!`, `MISS!`, and `K.O.!` when the target drops. In combat the game hides damage
   amounts from addons, but they are handed straight to the text, so the numbers still show.
 - **Kick** – `KICK IT!` flashes while your target is casting something you can kick. With Kick

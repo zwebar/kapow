@@ -20,6 +20,32 @@ local seq = 0
 
 function FX:Build()
     self.layer = K.HUD.fx
+    -- Damage numbers and CRIT! go over the target, where the game's own combat numbers would:
+    -- a layer of their own, not part of the HUD (they do not move or fade with it).
+    local hits = CreateFrame("Frame", nil, UIParent)
+    hits:SetSize(10, 10)
+    hits:SetFrameStrata("MEDIUM")
+    hits:SetFrameLevel(40)
+    hits:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+    self.hits = hits
+end
+
+-- Puts the hit layer just above the target's nameplate (clear of the combo arc), or in the
+-- middle of the screen above your character when the target has no nameplate we can use.
+function FX:AimHits()
+    local hits = self.hits
+    if not hits then return end
+    local plate
+    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+        plate = K.Safe(C_NamePlate.GetNamePlateForUnit, "target")
+        if K.IsSecret(plate) or type(plate) ~= "table" then plate = nil end
+    end
+    hits:ClearAllPoints()
+    if plate then
+        hits:SetPoint("BOTTOM", plate, "TOP", 0, 72)
+    else
+        hits:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+    end
 end
 
 local SetFontSize = K.SetFont
@@ -115,7 +141,8 @@ end
 function FX:Word(text, o)
     if not self.layer then return end
     o = o or {}
-    local side = (o.side == 1) and 1 or -1
+    -- side: -1 left, 1 right of the HUD; 0 over the target (o.mid)
+    local side = o.mid and 0 or (o.side == 1) and 1 or -1
     if current[side] then DropWord(current[side]) end
     local f = AcquireWord()
     f.busy = true
@@ -172,12 +199,21 @@ function FX:Word(text, o)
     local s = K.db.fx or 1
     -- Placed by its inner edge, so a wide burst grows outward instead of over the HUD, and
     -- nudged around its side's spot so it does not land in exactly the same place each time.
-    local x = side * (WORD_EDGE + math.random() * WORD_JITTER_X + sw * s / 2)
-    local y = WORD_Y + (math.random() * 2 - 1) * WORD_JITTER_Y
+    -- A mid burst goes over the target instead, nudged a little.
+    local parent = (side == 0) and self.hits or self.layer
+    local x, y
+    if side == 0 then
+        self:AimHits()
+        x, y = (math.random() * 2 - 1) * 14, 30 + (math.random() * 2 - 1) * 8
+    else
+        x = side * (WORD_EDGE + math.random() * WORD_JITTER_X + sw * s / 2)
+        y = WORD_Y + (math.random() * 2 - 1) * WORD_JITTER_Y
+    end
+    f:SetParent(parent)
     f:SetScale(s)
     f:ClearAllPoints()
-    f:SetPoint("CENTER", self.layer, "CENTER", x / s, y / s)
-    f:SetFrameLevel(self.layer:GetFrameLevel() + 1 + (seq % 30))
+    f:SetPoint("CENTER", parent, "CENTER", x / s, y / s)
+    f:SetFrameLevel(parent:GetFrameLevel() + 1 + (seq % 30))
 
     local hold = o.hold or 0.9
     for i = 1, #f.tail do f.tail[i]:SetStartDelay(hold) end
@@ -228,7 +264,8 @@ local function NewPop()
     return f
 end
 
-function FX:Pop(text, x, y, color, size, rise)
+-- parent: the frame x, y are relative to (default the HUD's effect layer)
+function FX:Pop(text, x, y, color, size, rise, parent)
     if not self.layer then return end
     local f
     for i = 1, #pops do
@@ -258,7 +295,10 @@ function FX:Pop(text, x, y, color, size, rise)
     f.back:SetRotation(tilt)
     f.rise:SetOffset(0, rise or 24)
     f:ClearAllPoints()
-    f:SetPoint("CENTER", self.layer, "CENTER", x + (math.random() * 2 - 1) * 8, y + (math.random() * 2 - 1) * 5)
+    parent = parent or self.layer
+    f:SetParent(parent)
+    f:SetFrameLevel(parent:GetFrameLevel() + 2)
+    f:SetPoint("CENTER", parent, "CENTER", x + (math.random() * 2 - 1) * 8, y + (math.random() * 2 - 1) * 5)
     f.ag:Stop()
     f:SetAlpha(1)
     f:Show()

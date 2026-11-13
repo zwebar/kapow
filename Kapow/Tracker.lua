@@ -53,23 +53,25 @@ local Show = {}
 T.Show = Show
 
 -- These are what happened, so they show on the right; your own abilities show on the left.
--- A crit is meant to be loud: a big burst with the number in large yellow figures under it,
--- stars and a jolt. amount may be hidden from us in combat; the burst can still show it.
+-- A crit is meant to be loud: a big burst over the target, where the game's own combat numbers
+-- would be, with the number in large yellow figures under it, and a jolt. amount may be hidden
+-- from us in combat; the burst can still show it.
 function Show.Crit(amount)
-    local x, y = FX:Word("CRIT!", { side = 1, color = C.red, shape = "burst2", size = 1.15, sub = amount,
+    FX:Word("CRIT!", { mid = true, color = C.red, shape = "burst2", size = 1.15, sub = amount,
         subSize = 24, subFlags = "THICKOUTLINE", subColor = C.yellow, textColor = C.yellow })
-    if x then FX:Sparks(x, y, C.yellow, 5, 50) end
     HUD:Shake(3, 0.18)
 end
 
 -- An ordinary hit: a small number, ink-outlined and a little tilted like a comic, that drifts up
--- and fades just right of the HUD, below the word bursts. Kept modest on purpose.
+-- and fades over the target, where the game's own combat numbers would be. Kept modest on
+-- purpose; quick hits spread out a little so they do not land on top of each other.
 local hitSlot = 0
 function Show.Hit(amount)
     hitSlot = hitSlot % 4 + 1
-    local x = 150 + hitSlot * 12 + math.random() * 10
-    local y = 70 + (hitSlot % 2) * 12
-    FX:Pop(amount, x, y, C.paper, 13, 16)
+    FX:AimHits()
+    local x = ({ -26, 18, -8, 30 })[hitSlot] + (math.random() * 2 - 1) * 6
+    local y = (hitSlot % 2) * 10
+    FX:Pop(amount, x, y, C.paper, 15, 30, FX.hits)
 end
 
 function Show.Miss(word)
