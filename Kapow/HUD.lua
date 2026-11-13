@@ -528,7 +528,10 @@ function HUD:SetPrompt(text, cast, mode)
     elseif nowGo then
         -- just became something you can do: pulse and a ring to catch the eye
         prompt.pulse:Play()
-        K.FX:Ring(0, PROMPT_Y, cast.helpful == true and C.teal or C.red, 50, 150, 0.3)
+        -- teal for a helpful spell when we can tell; red otherwise. In combat the flag can be
+        -- hidden, and a hidden value can only be handed to widgets, never compared or tested.
+        local helpful = not IsSecret(cast.helpful) and cast.helpful == true
+        K.FX:Ring(0, PROMPT_Y, helpful and C.teal or C.red, 50, 150, 0.3)
     end
 end
 
