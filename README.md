@@ -3,6 +3,17 @@
 A comic-book HUD for rogues in **WoW Classic Forever**. Energy cells, combo pips, and a POW!
 for everything you do.
 
+![Five points, finish it: an Eviscerate burst beside the energy bar](docs/screens/finisher.jpg)
+
+| | |
+|---|---|
+| ![Kick the heal: the cast bar names the spell and flags heals](docs/screens/kick-the-heal.jpg) | ![Denied: an interrupt lands, with Kick's cooldown counting down](docs/screens/denied.jpg) |
+| ![Open with a stun: combo points arc over the target's nameplate](docs/screens/opener.jpg) | ![Kick on cooldown: the cast bar suggests Gouge instead](docs/screens/gouge-it.jpg) |
+| ![Sap: a crowd control timer under the energy bar](docs/screens/sap.jpg) | |
+
+<sub>Rendered from the addon's own layout code (`node tools/test.js --showcase`), not in-game
+screenshots; the grey square in the cast bar is where the spell's icon goes.</sub>
+
 - **Energy** – five slanted cells and a big number. Spent energy lingers as a pale chunk before
   it drains. Regeneration is kept quiet: the number moves in calm steps and a tick only gives a
   soft flash. A bolt runs along the line under the cells, from left to right every two seconds,
@@ -49,34 +60,6 @@ game. It only runs on rogues.
 | `/kapow prompt` | toggle `KICK IT!` |
 | `/kapow reset` | default position and size |
 
-## How it knows things
-
-Classic Forever gives addons no combat log, and hides some numbers from them in combat
-(energy, aura and cooldown data come back as "secret" values that can be shown but not
-calculated with). So:
-
-- Energy is handed straight to the bars and the number. Ticks, spending and "full" use the
-  exact value when it is readable, and the timing of power events and your casts when it is not.
-- What you did comes from your own spell casts, which are never hidden. Spells are matched by
-  name, so every rank and the Forever-specific versions work.
-- Countdown boxes run on the game's own timers. For a cooldown, the game hands over a timer
-  object; for a debuff or buff, the box finds the aura your cast created on the unit (aura IDs
-  are never hidden) and takes that aura's timer. The game then fills the bar and writes the
-  seconds itself, so they are exact even when the numbers are hidden from addons: talents,
-  ranks, diminishing returns and Forever's own spell versions included. An aura box goes away
-  when the aura leaves the unit (broken early, dispelled, or a stun that missed).
-- Before the game's timer arrives (a split second), and when it cannot (a box for a target you
-  have since switched away from, while the numbers are hidden), a box falls back to an estimate:
-  the real duration it learned the last time it could read one on this character, or the
-  spell's base value. The `KICK IN 3` countdown reads the game's cooldown when it may, and that
-  estimate otherwise.
-- The game says what happened to your target but not who did it. So in a party or raid,
-  `CRIT!`/`DODGED!` and `K.O.!` are switched off, and `DENIED!` only shows when the game names
-  you as the one who interrupted. Solo, they can only be yours.
-- What the target is casting may also be hidden from addons. The name and icon still show (the
-  game draws them), and the heal colour and tag are switched by the game from the hidden value;
-  in that case any helpful spell counts as a heal, and the cast bar is left out.
-
 ## Credits
 
 Lettering is [Bangers](https://github.com/googlefonts/bangers) by Vernon Adams, under the SIL
@@ -91,3 +74,6 @@ damage-number font is used instead.
   the client, and replays a fight with energy readable and with energy secret). It needs a
   folder of those docs and `fengari-web.js`; pass `--docs` and `--fengari` if they are not where
   it looks. `--snap out.html` also paints what the HUD looks like at moments of the demo.
+- The README images: `node tools/test.js --showcase /tmp/show/index.html`, then
+  `python3 tools/showcase_save.py /tmp/show` and open `http://localhost:8767/index.html?save`;
+  each image is written to `docs/screens` (as JPEG where macOS `sips` is available).

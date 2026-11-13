@@ -20,6 +20,17 @@ const DOCS = opt('docs', path.join(ROOT, '..', 'chronicle', 'tools', 'blizzard_r
 const FENGARI = opt('fengari', path.join(ROOT, '..', 'chronicle', 'emulator', 'vendor', 'fengari-web.js'));
 const VERBOSE = args.includes('--verbose');
 const SNAP = opt('snap', null); // write an HTML page of rendered HUD snapshots here
+// write a page of polished presentation images (the README's screens) here
+const SHOWCASE_OUT = opt('showcase', null);
+// moments of the demo shown as presentation images: time, file name, caption
+const SHOWCASE = [
+  { t: 11.62, file: 'finisher', title: 'FIVE POINTS. FINISH IT!', sub: 'Finishers hit harder the more combo points you spend' },
+  { t: 3.8, file: 'kick-the-heal', title: 'KICK THE HEAL!', sub: 'See what your target casts, and whether it is a heal' },
+  { t: 4.62, file: 'denied', title: 'DENIED!', sub: 'Interrupts land with a bang; cooldowns run on the game\'s own timers' },
+  { t: 1.33, file: 'opener', title: 'OPEN WITH A STUN', sub: 'Combo points arc over your target\'s nameplate' },
+  { t: 6.9, file: 'gouge-it', title: 'KICK ON COOLDOWN? GOUGE IT!', sub: 'The next best interrupt, the moment it is ready' },
+  { t: 13.55, file: 'sap', title: 'SAP! Z Z Z', sub: 'Crowd control timers straight from the game' },
+];
 const FONT = opt('font', path.join(ROOT, 'Kapow', 'Fonts', 'Bangers-Regular.ttf'));
 const SNAP_TIMES = [0.7, 1.33, 2.42, 3.8, 4.62, 6.9, 7.5, 9.58, 11.62, 12.45, 13.55];
 
@@ -84,7 +95,7 @@ const fontDir = path.join(ROOT, 'Kapow', 'Fonts');
 const fonts = fs.existsSync(fontDir) ? fs.readdirSync(fontDir) : [];
 src += 'FONTFILES = ' + lua(Object.fromEntries(fonts.map((f) => [f, true]))) + '\n';
 src += 'VERBOSE = ' + (VERBOSE ? 'true' : 'false') + '\n';
-if (SNAP) src += 'SNAP = {' + SNAP_TIMES.join(',') + '}\n';
+if (SNAP || SHOWCASE_OUT) src += 'SNAP = {' + SNAP_TIMES.join(',') + '}\n';
 src += 'FILES = {}\n';
 for (const f of files) {
   const code = fs.readFileSync(path.join(ROOT, 'Kapow', f.replace(/\\/g, '/')), 'utf8');
@@ -102,7 +113,7 @@ if (cut >= 0) {
 console.log(out);
 
 // ---------------------------------------------------------------- paint the snapshots
-if (SNAP && shots) {
+if ((SNAP || SHOWCASE_OUT) && shots) {
   const zlib = require('zlib');
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
@@ -146,11 +157,23 @@ if (SNAP && shots) {
   const images = {};
   for (const a of art) images[a] = 'data:image/png;base64,' + tgaToPng(path.join(ROOT, 'Kapow', 'Art', a + '.tga')).toString('base64');
   const font = fs.existsSync(FONT) ? fs.readFileSync(FONT).toString('base64') : null;
-  const page = fs.readFileSync(path.join(__dirname, 'snap.html'), 'utf8')
+  const template = fs.readFileSync(path.join(__dirname, 'snap.html'), 'utf8')
     .replace('/*FONT*/', font ? `@font-face { font-family: hud; src: url(data:font/ttf;base64,${font}); }` : '')
     .replace('"@@IMAGES@@"', JSON.stringify(images))
     .replace('"@@SHOTS@@"', shots);
-  fs.writeFileSync(SNAP, page);
-  console.log('snapshots written to ' + SNAP);
+  if (SNAP) {
+    fs.writeFileSync(SNAP, template.replace('"@@SHOWCASE@@"', '[]'));
+    console.log('snapshots written to ' + SNAP);
+  }
+  if (SHOWCASE_OUT) {
+    const picks = SHOWCASE.map((s) => {
+      const index = SNAP_TIMES.indexOf(s.t);
+      if (index < 0) throw new Error('showcase time ' + s.t + ' is not one of SNAP_TIMES');
+      return { index, file: s.file, title: s.title, sub: s.sub };
+    });
+    fs.writeFileSync(SHOWCASE_OUT, template.replace('"@@SHOWCASE@@"', JSON.stringify(picks))
+      .replace('<h1>Kapow: what the addon draws</h1>', '<h1>Kapow: presentation images</h1>'));
+    console.log('showcase written to ' + SHOWCASE_OUT);
+  }
 }
 process.exit(/^FAIL/m.test(out) ? 1 : 0);

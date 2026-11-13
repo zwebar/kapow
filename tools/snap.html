@@ -23,8 +23,13 @@ Positions, sizes, colours and layering are the addon's; the font metrics and pop
 <script>
 const IMAGES = "@@IMAGES@@";
 const SHOTS = "@@SHOTS@@";
+// Showcase mode: a list of { index, file, title, sub } picking shots to present as polished
+// images (backdrop, caption). Empty for the plain snapshot grid.
+const SHOWCASE = "@@SHOWCASE@@";
+const SHOW = SHOWCASE.length > 0;
 // the window of the 1280x720 UI that is shown, in UI units (y measured from the bottom)
-const VIEW = { x: 290, y: 60, w: 700, h: 500 };
+// showcase: wider, and with a band at the top for the caption
+const VIEW = SHOW ? { x: 250, y: 84, w: 780, h: 556 } : { x: 290, y: 60, w: 700, h: 500 };
 const Z = 2;
 
 const imgs = {};
@@ -75,13 +80,91 @@ function drawTex(g, it) {
   g.restore();
 }
 
-function draw(canvas, shot) {
+// A dusky scene for presentation images: no game art, just mood.
+function backdrop(g, W, H) {
+  const sky = g.createRadialGradient(W * 0.5, H * 0.38, 20, W * 0.5, H * 0.45, W * 0.75);
+  sky.addColorStop(0, '#4a4670'); sky.addColorStop(0.45, '#2a3145'); sky.addColorStop(1, '#0e1119');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, W, H);
+  // a warm glow where the target stands
+  const glow = g.createRadialGradient(W * 0.5, H * 0.16, 10, W * 0.5, H * 0.16, W * 0.32);
+  glow.addColorStop(0, 'rgba(255,170,110,0.22)'); glow.addColorStop(1, 'rgba(255,170,110,0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, H);
+  // comic halftone in two corners
+  g.fillStyle = 'rgba(255,255,255,0.07)';
+  for (const [cx, cy, dir] of [[0, H, 1], [W, 0, -1]]) {
+    for (let i = 0; i < 26; i++) {
+      for (let j = 0; j < 26; j++) {
+        const x = cx + dir * i * 14, y = cy - dir * j * 14;
+        const r = Math.max(0, 4.2 - (i + j) * 0.16);
+        if (r > 0.3) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+      }
+    }
+  }
+  // ground shadow where you stand
+  const ground = g.createRadialGradient(W * 0.5, H * 0.66, 5, W * 0.5, H * 0.66, W * 0.2);
+  ground.addColorStop(0, 'rgba(0,0,0,0.35)'); ground.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = ground;
+  g.fillRect(0, 0, W, H);
+}
+
+function vignette(g, W, H) {
+  const v = g.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 0.72);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, W, H);
+}
+
+// The comic caption box in the top-left corner, and a small credit line.
+function caption(g, W, H, title, sub) {
+  g.save();
+  g.font = '64px hud, Impact, sans-serif';
+  const tw = g.measureText(title).width;
+  const x = 40, y = 34, padX = 26, th = 84;
+  g.translate(x, y);
+  g.rotate(-0.025);
+  g.fillStyle = 'rgba(0,0,0,0.55)';
+  g.fillRect(9, 9, tw + padX * 2, th);
+  g.fillStyle = '#0d0a14';
+  g.fillRect(-5, -5, tw + padX * 2 + 10, th + 10);
+  g.fillStyle = '#ffd23f';
+  g.fillRect(0, 0, tw + padX * 2, th);
+  g.fillStyle = '#0d0a14';
+  g.textBaseline = 'middle';
+  g.fillText(title, padX, th / 2 + 3);
+  if (sub) {
+    g.font = '600 26px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
+    const sw = g.measureText(sub).width;
+    const sy = th + 14, sh = 46;
+    g.fillStyle = '#0d0a14';
+    g.fillRect(14, sy - 4, sw + 40, sh + 8);
+    g.fillStyle = '#fff6dc';
+    g.fillRect(18, sy, sw + 32, sh);
+    g.fillStyle = '#1a1626';
+    g.fillText(sub, 34, sy + sh / 2 + 1);
+  }
+  g.restore();
+  g.save();
+  g.font = '28px hud, Impact, sans-serif';
+  g.textAlign = 'right';
+  g.textBaseline = 'top';
+  g.fillStyle = 'rgba(255,255,255,0.5)';
+  g.fillText('KAPOW  \u00b7  ROGUE HUD FOR WOW CLASSIC FOREVER', W - 36, 36);
+  g.restore();
+}
+
+function draw(canvas, shot, show) {
   canvas.width = VIEW.w * Z; canvas.height = VIEW.h * Z;
   const g = canvas.getContext('2d');
-  const bg = g.createLinearGradient(0, 0, canvas.width, canvas.height);
-  bg.addColorStop(0, '#46553a'); bg.addColorStop(0.55, '#2c3626'); bg.addColorStop(1, '#1b2016');
-  g.fillStyle = bg;
-  g.fillRect(0, 0, canvas.width, canvas.height);
+  if (show) {
+    backdrop(g, canvas.width, canvas.height);
+  } else {
+    const bg = g.createLinearGradient(0, 0, canvas.width, canvas.height);
+    bg.addColorStop(0, '#46553a'); bg.addColorStop(0.55, '#2c3626'); bg.addColorStop(1, '#1b2016');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+  }
   for (const it of shot.items) {
     if (it.kind === 'tex') {
       if (it.mask && imgs[it.mask.art]) {
@@ -122,18 +205,32 @@ function draw(canvas, shot) {
   }
 }
 
-Promise.all(load).then(() => (document.fonts ? document.fonts.load('20px hud').catch(() => {}) : null)).then(() => {
+Promise.all(load).then(() => (document.fonts ? document.fonts.load('20px hud').catch(() => {}) : null)).then(async () => {
   const grid = document.getElementById('grid');
-  for (const shot of SHOTS) {
+  const list = SHOW ? SHOWCASE.map((s) => ({ shot: SHOTS[s.index], meta: s })) : SHOTS.map((shot) => ({ shot }));
+  const saving = SHOW && location.search.includes('save');
+  let saved = 0;
+  for (const { shot, meta } of list) {
     const fig = document.createElement('figure');
     const c = document.createElement('canvas');
     const cap = document.createElement('figcaption');
-    cap.textContent = shot.label;
+    cap.textContent = meta ? meta.file + '.png' : shot.label;
     fig.append(c, cap);
     grid.append(fig);
-    draw(c, shot);
+    draw(c, shot, !!meta);
+    if (meta) {
+      vignette(c.getContext('2d'), c.width, c.height);
+      caption(c.getContext('2d'), c.width, c.height, meta.title, meta.sub);
+    }
+    if (saving) {
+      // tools/showcase_save.py receives these and writes docs/screens/<file>.png
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const r = await fetch('/save?name=' + encodeURIComponent(meta.file), { method: 'POST', body: blob });
+      if (r.ok) saved++;
+    }
   }
-  document.title = 'Kapow snapshots (' + SHOTS.length + ')';
+  document.title = SHOW ? 'Kapow showcase (' + list.length + (saving ? ', saved ' + saved : '') + ')'
+    : 'Kapow snapshots (' + SHOTS.length + ')';
 });
 </script>
 </body>
