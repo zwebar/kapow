@@ -157,6 +157,11 @@ function IMPL.RegisterUnitEvent(self, e, ...)
     EVENTS[e][self] = units
     return true
 end
+function IMPL.SetParent(self, p)
+    if p ~= nil and getmetatable(p) ~= WidgetMT then error("SetParent: bad parent " .. tostring(p), 2) end
+    self.__parent = p
+end
+function IMPL.GetParent(self) return self.__parent end
 function IMPL.Show(self) self.__shown = true end
 function IMPL.Hide(self) self.__shown = false end
 function IMPL.SetShown(self, s)
@@ -419,6 +424,24 @@ local function setup()
     IsInGroup = function() return G.grouped end
     define("UnitGUID", function(unit) return unit == "player" and "Player-1-0001" or hide("Creature-0-1") end)
     define("UnitExists", function() return G.target end)
+    -- A stand-in nameplate for the target, high up in the middle of the screen, with a health
+    -- bar and a name so snapshots show where the arc lands.
+    NAMEPLATE = new("Frame", UIParent)
+    NAMEPLATE:SetPoint("CENTER", UIParent, "BOTTOMLEFT", 640, 470)
+    NAMEPLATE:SetSize(110, 26)
+    local hb = NAMEPLATE:CreateTexture(nil, "ARTWORK")
+    hb:SetColorTexture(0.78, 0.12, 0.1, 1)
+    hb:SetPoint("BOTTOM", NAMEPLATE, "BOTTOM", 0, 3)
+    hb:SetSize(100, 8)
+    local nm = NAMEPLATE:CreateFontString(nil, "OVERLAY")
+    nm:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    nm:SetPoint("BOTTOM", hb, "TOP", 0, 2)
+    nm:SetTextColor(1, 0.25, 0.2)
+    nm:SetText("Defias Bandit")
+    defineNS("C_NamePlate", "GetNamePlateForUnit", function(unit)
+        if unit == "target" and G.target and G.plates then return NAMEPLATE end
+        return nil
+    end)
     define("UnitCanAttack", function() return G.target end)
     define("UnitIsDead", function() return G.dead end)
     define("UnitAffectingCombat", function() return G.combat end)
@@ -534,6 +557,15 @@ local function boot(class)
     spy(K.HUD, "Spend", function(cost) return "spend " .. str(cost) end)
     spy(K.HUD, "SetCombo", function(n, quiet) if n ~= K.HUD.combo then return "combo " .. n .. (quiet and " (quiet)" or "") end end)
     spy(K.HUD, "SetComboSecret", function() return "combo <secret>" end)
+    local attach = K.Plate.Attach
+    K.Plate.Attach = function(self, ...)
+        local was = self.attached
+        local r = attach(self, ...)
+        if was ~= self.attached then
+            log(self.attached and "arc   on the target's nameplate (HUD pips hidden)" or "arc   hidden (HUD pips back)")
+        end
+        return r
+    end
     spy(K.HUD, "Error", function() return "error flash" end)
     spy(K.HUD, "SetPalette", function(s) if s ~= K.HUD.stealth then return "palette " .. (s and "stealth" or "normal") end end)
 
@@ -565,8 +597,9 @@ local function fight(label, hidden)
     say("--- " .. label .. " ---")
     LOG = {}
     t0 = clock
-    G.target, G.dead = true, false
+    G.target, G.dead, G.plates = true, false, true
     fire("PLAYER_TARGET_CHANGED")
+    fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
     energy(100)
     G.stealth = true
     fire("UPDATE_STEALTH")
@@ -625,6 +658,13 @@ local function fight(label, hidden)
     tick()
     cast(8643, true, 0)
     step(1.5)
+    log("(the target walks out of sight: its nameplate goes, then comes back)")
+    G.plates = false
+    fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+    step(0.5)
+    G.plates = true
+    fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    step(0.5)
     -- stand around until energy caps, then stay capped for a while
     for _ = 1, 5 do tick() step(2) end
     step(3)
@@ -700,6 +740,42 @@ local function grouped()
     for _, l in ipairs(LOG) do say(l) end
 end
 
+-- Energy trickling in continuously (+1 every 0.1s), readable and hidden: no tick effects,
+-- and the number changes calmly.
+local function trickle()
+    say("")
+    say("--- energy trickling in (expect: no ticks once trickling, number at most ~4 changes/s) ---")
+    local shows = 0
+    local orig = K.HUD.ShowNumber
+    K.HUD.ShowNumber = function(self, ...) shows = shows + 1 return orig(self, ...) end
+    for _, hidden in ipairs({ false, true }) do
+        LOG = {}
+        t0 = clock
+        G.secret = hidden
+        G.combat = hidden
+        energy(10)
+        step(3)
+        shows = 0
+        for _ = 1, 50 do
+            G.energy = G.energy + 1
+            power("ENERGY")
+            step(0.1)
+        end
+        local ticks = 0
+        for _, l in ipairs(LOG) do if l:find("tick ", 1, true) then ticks = ticks + 1 end end
+        say(string.format("  %s: %d tick effects, number changed %d times in 5s", hidden and "hidden" or "readable", ticks, shows))
+        if ticks > 3 then fail("trickling energy still shows ticks (" .. ticks .. ")") end
+        if shows > 24 then fail("energy number changes too often (" .. shows .. " in 5s)") end
+        -- spending still shows straight away
+        shows = 0
+        cast(1752, true)
+        step(0.05)
+        if shows == 0 then fail("energy number did not follow a spend") end
+    end
+    G.secret, G.combat = false, false
+    K.HUD.ShowNumber = orig
+end
+
 local function slash(msg)
     call("/kapow " .. msg, SlashCmdList.KAPOW, msg)
 end
@@ -727,6 +803,14 @@ local function commands()
     slash("idle 0.35")
     slash("fx 0.8")
     slash("fx 1")
+    slash("pips hud")
+    slash("pips both")
+    slash("pips sideways")
+    slash("pips plate")
+    slash("ticker")
+    slash("ticker")
+    slash("arc 12")
+    slash("arc 999")
     for _, c in ipairs({ "words", "words", "hits", "hits", "prompt", "prompt", "reset" }) do slash(c) end
     step(1)
     for _, l in ipairs(LOG) do say(l) end
@@ -914,6 +998,7 @@ boot("ROGUE")
 fight("fight, energy readable", false)
 fight("fight, energy secret in combat", true)
 grouped()
+trickle()
 commands()
 local counts = string.format("%d frames, %d textures, %d font strings", COUNT.frames, COUNT.textures, COUNT.fontstrings)
 
@@ -946,6 +1031,8 @@ local result = table.concat(head, "\n") .. "\n" .. table.concat(OUT, "\n")
 
 if SNAP then
     boot("ROGUE")
+    G.target, G.plates = true, true
+    fire("PLAYER_TARGET_CHANGED")
     slash("test")
     local shots, last = {}, 0
     for _, t in ipairs(SNAP) do

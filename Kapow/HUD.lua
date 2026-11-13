@@ -11,6 +11,8 @@ local CELL_W, CELL_H, PITCH = 60, 30, 45
 local CELL_Y, PIP_Y = -6, 27
 local PIP = 27
 local LAG = 0.35 -- how long the pale "just spent" chunk lingers
+local NUM_EVERY = 0.25 -- while energy regenerates, the number changes at most this often
+local NUM_FAST = 0.5 -- after you spend, it follows every change for this long
 
 HUD.CELL_Y, HUD.PIP_Y, HUD.CHIP_Y = CELL_Y, PIP_Y, -52
 
@@ -149,6 +151,7 @@ function HUD:Build()
         self.pips[i] = pip
     end
     self.combo = 0
+    self.pipsShown = true
 
     -- Shown instead of lit pips if the game ever hides the combo count from addons
     local ct = K.Text(body, "OVERLAY", 20)
@@ -283,8 +286,15 @@ function HUD:SetEnergy(value, maxValue, instant)
     for i = 1, CELLS do
         self.cells[i].fill:SetValue(value, (not instant) and EASE or nil)
     end
-    self.num.text:SetFormattedText("%d", value)
-    self.num.back:SetFormattedText("%d", value)
+    -- The number: spending shows at once; regeneration is shown in calm steps rather than
+    -- every few milliseconds. (The value may be secret, so this goes by time, not by size.)
+    self.numValue = value
+    local now = GetTime()
+    if instant or now < (self.numFastUntil or 0) or now - (self.numAt or 0) >= NUM_EVERY then
+        self:ShowNumber(now)
+    else
+        self.numDirty = true
+    end
 
     self.lagValue = value
     if instant then
@@ -293,6 +303,19 @@ function HUD:SetEnergy(value, maxValue, instant)
     elseif not self.lagDue then
         self.lagDue = GetTime() + LAG
     end
+end
+
+function HUD:ShowNumber(now)
+    self.numAt, self.numDirty = now, false
+    self.num.text:SetFormattedText("%d", self.numValue)
+    self.num.back:SetFormattedText("%d", self.numValue)
+end
+
+-- Energy is about to drop (a cast went off): let the number follow every change for a moment.
+function HUD:ExpectSpend()
+    local now = GetTime()
+    self.numFastUntil = now + NUM_FAST
+    if self.numDirty then self:ShowNumber(now) end
 end
 
 function HUD:BumpNumber()
@@ -321,23 +344,26 @@ function HUD:CellCross(prev, value)
     end
 end
 
--- An energy tick landed. amount and value are nil when the game hides them.
+-- A regular energy tick landed. Kept quiet on purpose, it happens every two seconds:
+-- a soft flash on the cell being filled and a blink at the end of the tick track.
+-- amount and value are nil when the game hides them.
 function HUD:Tick(amount, value)
-    local seg = (self.maxE or 100) / CELLS
-    for i = 1, CELLS do
-        if value == nil then
-            FlashCell(self.cells[i], C.white, 0.22, 0.22)
-        elseif value > (i - 1) * seg then
-            FlashCell(self.cells[i], C.white, 0.25, 0.2)
-        end
+    if value then
+        local seg = (self.maxE or 100) / CELLS
+        local i = math.max(1, math.min(CELLS, math.floor(value / seg) + 1))
+        FlashCell(self.cells[i], C.white, 0.3, 0.25)
+        if amount then self:CellCross(value - amount, value) end
     end
-    if value and amount then self:CellCross(value - amount, value) end
-    local endX = self.trackW / 2 - 4
-    K.FX:Glow(endX, CELL_Y - 21, C.cyan, 44, 0.3)
+    K.FX:Glow(self.trackW / 2 - 4, CELL_Y - 21, C.cyan, 30, 0.25)
+end
+
+-- A big chunk of energy at once (Thistle Tea, Adrenaline Rush refunds...): that one is worth a pop.
+function HUD:Refill(amount, value)
+    for i = 1, CELLS do FlashCell(self.cells[i], C.white, 0.5, 0.3) end
+    self:CellCross(value and amount and (value - amount) or nil, value)
     if amount then
-        K.FX:Pop("+" .. math.floor(amount + 0.5), endX + 14, CELL_Y - 16, C.cyan, 13, 18)
+        K.FX:Pop("+" .. math.floor(amount + 0.5), self.trackW / 2 + 10, CELL_Y - 16, C.cyan, 15, 18)
     end
-    self:BumpNumber()
 end
 
 function HUD:Spend(cost)
@@ -345,6 +371,7 @@ function HUD:Spend(cost)
         K.FX:Pop("-" .. math.floor(cost + 0.5), CellX(1) - CELL_W / 2 - 22, CELL_Y - 24, C.red, 13, -16)
     end
     self:Shake(2.5, 0.16)
+    self:ExpectSpend()
     self:BumpNumber()
 end
 
@@ -406,8 +433,9 @@ end
 -- lastTick: GetTime() of the last energy tick, or nil to hide the runner.
 function HUD:SetTickClock(lastTick)
     self.lastTick = lastTick
-    self.track:SetShown(lastTick ~= nil)
-    self.bolt:SetShown(lastTick ~= nil)
+    local show = lastTick ~= nil and K.db.ticker ~= false
+    self.track:SetShown(show)
+    self.bolt:SetShown(show)
 end
 
 --------------------------------------------------------------------------------
@@ -418,10 +446,26 @@ local function PipSize(pip, s)
     pip.shadow:SetSize(PIP * s, PIP * s)
 end
 
+-- The HUD's own pips step aside while the arc on the target's nameplate shows them.
+function HUD:SetPipsShown(show)
+    if show == self.pipsShown then return end
+    self.pipsShown = show
+    for i = 1, CELLS do
+        local pip = self.pips[i]
+        pip.tex:SetShown(show)
+        pip.shadow:SetShown(show)
+        pip.glow:SetShown(show)
+    end
+    if not show then self.comboText:Hide() end
+end
+
 function HUD:SetCombo(n, quiet)
+    K.Plate:SetCombo(n, quiet)
+    local loud = not quiet
     self.comboText:Hide()
     local was = self.combo or 0
     self.combo = n
+    if not self.pipsShown then quiet = true end -- the arc does the popping
     for i = 1, CELLS do
         local pip = self.pips[i]
         local on = i <= n
@@ -459,12 +503,13 @@ function HUD:SetCombo(n, quiet)
     if n >= CELLS and was < CELLS and not quiet then
         K.FX:Lines(PipX(3), PIP_Y, C.red, 170, 0.5)
         K.FX:Pop("MAX!", PipX(CELLS) + 34, PIP_Y + 2, C.red, 17, 16)
-        self:Shake(3, 0.2)
     end
+    if n >= CELLS and was < CELLS and loud then self:Shake(3, 0.2) end
 end
 
 -- The count itself is hidden: show it as a number the game fills in.
 function HUD:SetComboSecret(value)
+    K.Plate:SetSecret(value)
     self.combo = nil
     for i = 1, CELLS do
         local pip = self.pips[i]
@@ -474,13 +519,16 @@ function HUD:SetComboSecret(value)
         pip.glow:SetAlpha(0)
     end
     self.comboText:SetFormattedText("%d", value)
-    self.comboText:Show()
+    self.comboText:SetShown(self.pipsShown)
 end
 
 --------------------------------------------------------------------------------
 -- Per frame
 --------------------------------------------------------------------------------
 function HUD:OnUpdate(dt, now)
+    -- the number catches up after a quiet spell
+    if self.numDirty and now - (self.numAt or 0) >= NUM_EVERY then self:ShowNumber(now) end
+
     -- the pale chunk catches up with the real value
     if self.lagDue and now >= self.lagDue then
         self.lagDue = nil

@@ -8,6 +8,7 @@
 Core.lua
 FX.lua
 HUD.lua
+Plate.lua
 Timers.lua
 Spells.lua
 Tracker.lua

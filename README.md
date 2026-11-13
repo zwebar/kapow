@@ -4,10 +4,13 @@ A comic-book HUD for rogues in **WoW Classic Forever**. Energy cells, combo pips
 for everything you do.
 
 - **Energy** – five slanted cells and a big number. Spent energy lingers as a pale chunk before
-  it drains; ticks zap in with a `+20`; a bolt runs under the cells to show when the next tick
-  lands; a `FULL!` badge nags you when you are capped. Not enough energy shakes the HUD red.
-- **Combo points** – diamond pips that pop in one by one, throb at five (`MAX!`), and burst
-  when you spend them.
+  it drains. Regeneration is kept quiet: the number moves in calm steps and a tick only gives a
+  soft flash. A bolt runs along the line under the cells, from left to right every two seconds,
+  arriving as the next energy tick lands (it hides if energy trickles in instead of ticking). A
+  `FULL!` badge nags you when you are capped; not enough energy shakes the HUD red.
+- **Combo points** – an arc of diamond pips above your target's nameplate. They pop in one by
+  one, throb at five (`MAX!`), and burst when you spend them. If the target has no nameplate
+  (nameplates off, or hidden from addons), the pips show on the HUD instead.
 - **Ability bursts** – `SLASH!`, `STAB!`, `AMBUSH!`, `GOUGE!`, `KICK!`, `SAP! z z z`, `POOF!`…
   Finishers grow with the points spent (`EVISCERATE! 5 POINTS`). Bursts pop up to the left and
   right of the HUD, never over the middle of the screen.
@@ -34,6 +37,9 @@ game. It only runs on rogues.
 | `/kapow scale 1.2` | resize (0.5 – 2.5) |
 | `/kapow idle 0.35` | opacity when nothing is happening (0 hides it) |
 | `/kapow fx 0.8` | size of the word bursts (0.5 – 1.5) |
+| `/kapow pips plate` / `hud` / `both` | where combo points show |
+| `/kapow arc 10` | how high the arc sits above the nameplate |
+| `/kapow ticker` | toggle the energy tick timer under the cells |
 | `/kapow words` | toggle the ability bursts |
 | `/kapow hits` | toggle `CRIT!` / `DODGED!` |
 | `/kapow prompt` | toggle `KICK IT!` |

@@ -30,7 +30,8 @@ local MISSES = {
     IMMUNE = "IMMUNE!", RESIST = "RESIST!", EVADE = "EVADE!", DEFLECT = "DEFLECT!",
 }
 
-local E = { max = 100, lastGain = 0, lastSpend = 0, lastCost = -10, small = 0 }
+local E = { max = 100, lastGain = 0, lastSpend = 0, lastCost = -10, fast = 0 }
+local TICK_GAP = 1.6 -- regen ticks are two seconds apart; gains closer together are not ticks
 T.energy = E
 
 -- A plain true/false out of something that might be hidden.
@@ -79,43 +80,45 @@ local function SetFull(full)
     HUD:SetFull(full, HUD.inCombat)
 end
 
+-- Energy either arrives in two-second ticks or trickles in continuously. Gains that keep
+-- coming less than a second apart mean trickling: then there are no ticks to show, only the
+-- bar filling.
+local function Trickling(now)
+    local gap = now - (E.lastGain or 0)
+    if gap < 1.0 then
+        E.fast = E.fast + 1
+    elseif gap > 2.5 then
+        E.fast = 0
+    end
+    if E.fast >= 3 and E.mode ~= "smooth" then
+        E.mode = "smooth"
+        E.lastTick = nil
+        HUD:SetTickClock(nil)
+    elseif E.fast == 0 and E.mode == "smooth" then
+        E.mode = nil
+    end
+    return E.mode == "smooth"
+end
+
+local function TickDue(now)
+    return not E.lastTick or now - E.lastTick >= TICK_GAP
+end
+
 -- d: how much was gained, or nil if the game hides it. v: the new value, or nil.
 local function Gain(d, now, v, prev)
+    local smooth = Trickling(now)
     E.lastGain = now
-    if d then
-        if d >= 10 and d <= 45 then
-            -- a classic 2-second energy tick
-            E.mode, E.small = "tick", 0
-            E.lastTick = now
-            HUD:SetTickClock(now)
-            HUD:Tick(d, v)
-        elseif d > 45 then
-            HUD:Tick(d, v) -- a big refill (Thistle Tea and the like)
-        else
-            if E.mode ~= "tick" then
-                E.small = E.small + 1
-                if E.small >= 8 and E.mode ~= "smooth" then
-                    E.mode = "smooth" -- energy trickles in here rather than ticking
-                    E.lastTick = nil
-                    HUD:SetTickClock(nil)
-                end
-            end
-            HUD:CellCross(prev, v)
-        end
-    elseif E.mode ~= "smooth" then
-        -- Hidden gain. Ticks come every 2 seconds, so only one that lands on the beat counts
-        -- as a tick; anything off the beat is a refund or a proc.
-        local onBeat = true
-        if E.lastTick then
-            local off = (now - E.lastTick) % 2
-            if off > 1 then off = 2 - off end
-            onBeat = off < 0.4
-        end
-        if onBeat then
-            E.lastTick = now
-            HUD:SetTickClock(now)
-            HUD:Tick(nil, nil)
-        end
+    if d and d > 45 then
+        HUD:Refill(d, v) -- Thistle Tea and the like
+    elseif smooth then
+        if d then HUD:CellCross(prev, v) end
+    elseif TickDue(now) and (not d or d >= 10) then
+        E.mode = "tick"
+        E.lastTick = now
+        HUD:SetTickClock(now)
+        HUD:Tick(d, v)
+    elseif d then
+        HUD:CellCross(prev, v)
     end
 end
 
@@ -287,7 +290,7 @@ function T:Cast(spellID)
     local cost = Spells:EnergyCost(spellID)
     if cost > 0 then
         E.lastCost, E.lastSpend = now, now
-        if E.known == false then HUD:Spend(cost) end
+        if E.known == false then HUD:Spend(cost) else HUD:ExpectSpend() end
     end
 
     local def = Spells:Find(spellID)

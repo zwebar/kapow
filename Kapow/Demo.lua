@@ -13,6 +13,9 @@ function Demo:Run()
     HUD.root:Show()
     Timers:Clear()
     K.Print("demo: a 15-second pretend fight")
+    if K.db.pips ~= "hud" and not K.Plate:Attach() then
+        K.Print("(target an enemy with nameplates on to see the combo arc over its head)")
+    end
 
     local energy, combo = 100, 0
 

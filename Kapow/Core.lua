@@ -29,6 +29,9 @@ local DEFAULTS = {
     locked = true,
     idle = 0.35,       -- HUD opacity when nothing is going on
     fx = 1,            -- size of the word bursts
+    ticker = true,     -- the bolt under the cells that counts down to the next energy tick
+    pips = "plate",    -- combo points: "plate" (arc on the target's nameplate), "hud" or "both"
+    arcY = 2,          -- how high the arc sits above the nameplate
     words = true,      -- POW! bursts for abilities
     hits = true,       -- CRIT! / DODGED! from what happens to the target
     prompt = true,     -- KICK IT! when the target starts casting
@@ -192,6 +195,7 @@ function K.Build()
     K.HUD:Build()
     K.FX:Build()
     K.Timers:Build()
+    K.Plate:Build()
 end
 
 local boot = CreateFrame("Frame")
@@ -262,6 +266,27 @@ SlashCmdList["KAPOW"] = function(msg)
         else
             K.Print("fx takes a number from 0.5 (small bursts) to 1.5")
         end
+    elseif cmd == "pips" then
+        if arg == "plate" or arg == "hud" or arg == "both" then
+            K.db.pips = arg
+            if K.built then K.Plate:Reanchor() end
+            K.Print("combo points: " .. (arg == "plate" and "arc on the target's nameplate (HUD when there is none)"
+                or arg == "hud" and "on the HUD" or "on the nameplate and the HUD"))
+        else
+            K.Print("pips takes plate, hud or both")
+        end
+    elseif cmd == "arc" then
+        local y = tonumber(arg)
+        if y and y >= -40 and y <= 80 then
+            K.db.arcY = y
+            if K.built then K.Plate:Reanchor() end
+            K.Print("arc height " .. y)
+        else
+            K.Print("arc takes a number from -40 to 80 (how high above the nameplate)")
+        end
+    elseif cmd == "ticker" then
+        Toggle("ticker", "energy tick timer")
+        if K.built then K.HUD:SetTickClock(K.HUD.lastTick) end
     elseif cmd == "words" then
         Toggle("words", "ability words")
     elseif cmd == "hits" then
@@ -269,8 +294,11 @@ SlashCmdList["KAPOW"] = function(msg)
     elseif cmd == "prompt" then
         Toggle("prompt", "KICK IT! prompt")
     elseif cmd == "reset" then
-        K.db.x, K.db.y, K.db.scale = DEFAULTS.x, DEFAULTS.y, DEFAULTS.scale
-        if K.built then K.HUD:ApplyPosition() end
+        K.db.x, K.db.y, K.db.scale, K.db.arcY = DEFAULTS.x, DEFAULTS.y, DEFAULTS.scale, DEFAULTS.arcY
+        if K.built then
+            K.HUD:ApplyPosition()
+            K.Plate:Reanchor()
+        end
         K.Print("position and scale reset")
     else
         K.Print("commands:")
@@ -278,7 +306,8 @@ SlashCmdList["KAPOW"] = function(msg)
         K.Print("  /kapow unlock | lock - move the HUD")
         K.Print("  /kapow scale 1.2 - resize   /kapow idle 0.35 - opacity out of combat")
         K.Print("  /kapow fx 0.8 - size of the word bursts")
-        K.Print("  /kapow words | hits | prompt - toggle ability words, CRIT!/DODGED!, KICK IT!")
+        K.Print("  /kapow pips plate | hud | both - where combo points show   /kapow arc 10 - arc height")
+        K.Print("  /kapow words | hits | prompt | ticker - toggle ability words, CRIT!/DODGED!, KICK IT!, tick timer")
         K.Print("  /kapow reset - back to the default spot")
         if K.isRogue == false then K.Print("(not a rogue: the HUD only runs for rogues, but the demo works)") end
     end
