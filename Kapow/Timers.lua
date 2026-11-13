@@ -84,6 +84,11 @@ local function Layout()
         t.chip:SetPoint("CENTER", Timers.parent, "CENTER", x, y)
     end
     Timers.count = n
+    -- the swing timer sits under the last row of boxes (or where the first row would be)
+    if K.Swing then
+        local rows = math.ceil(n / PER_ROW)
+        K.Swing:Place(K.HUD.CHIP_Y - math.max(0, rows) * (H + GAP) + (rows == 0 and 0 or 4))
+    end
 end
 
 local function Find(key)

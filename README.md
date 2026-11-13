@@ -44,6 +44,12 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,
   Sprint, Evasion and friends on you, and short cooldowns (`KICK 7.2`, then `KICK READY!`).
   A parry puts up a `RIPOSTE!` box.
+- **Swing timer** – a bar along the very bottom of the HUD, under the countdown boxes: it fills
+  as your next melee swing comes round, flashes when one lands, and shows your weapon speed.
+  Shown while you auto-attack. With no combat log, a swing is read from your target being hit
+  physically (or dodging, parrying, blocking, being missed) at about the time your next swing
+  is due. Solo that is reliable; in a group, other melee on the same target can now and then
+  nudge it.
 - Turns purple while you are stealthed. Only shown in combat: it pops up on a pull and fades
   out two seconds after combat ends.
 

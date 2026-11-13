@@ -289,6 +289,10 @@ function HUD:Build()
         HUD:ApplyPosition()
     end)
 
+    -- Swing timer: a bar along the very bottom of the HUD, under the countdown boxes (Swing.lua)
+    K.Swing:Build(body, self.trackW, base + 8)
+    K.Swing:Place(HUD.CHIP_Y)
+
     self.maxE = nil
     self.alpha = 1
     self:SetPalette(false)

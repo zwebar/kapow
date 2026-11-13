@@ -115,6 +115,11 @@ function Demo:Run()
     at(12.3, function() T.Show.KO() end)
     at(13.0, function() tick(40) end)
     at(13.4, function() cast("sap"); box("sap", "SAPPED", "cc", 25) end)
+    -- auto-attack with 2.6s daggers: the swing timer at the bottom
+    at(0.6, function() K.Swing:Set(nil, 2.6) end)
+    for t = 1.0, 14, 2.6 do
+        at(t, function() K.Swing:Set(GetTime(), 2.6) end)
+    end
     at(15.0, function() Demo:Stop() end)
 end
 
@@ -123,6 +128,7 @@ function Demo:Stop()
     K.demo = false
     local HUD, T = K.HUD, K.Tracker
     K.Timers:Clear()
+    K.Swing:Set(false)
     HUD:SetPrompt(nil)
     HUD:SetTickClock(nil)
     HUD:SetCombo(0, true)

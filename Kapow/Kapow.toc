@@ -12,6 +12,7 @@ FX.lua
 HUD.lua
 Plate.lua
 Timers.lua
+Swing.lua
 Spells.lua
 Tracker.lua
 Demo.lua

@@ -688,6 +688,7 @@ local function setup()
         return true
     end)
     define("InCombatLockdown", function() return G.combat end)
+    define("UnitAttackSpeed", function() return hide(1.8), nil end)
 end
 
 --------------------------------------------------------------------------------
@@ -816,6 +817,10 @@ local function boot(class)
         return r
     end
     spy(K.HUD, "Error", function() return "error flash" end)
+    spy(K.Swing, "Set", function(at, speed)
+        if at == false then return K.Swing.bar:IsShown() and "swing off" or nil end
+        return at and string.format("swing (%.1fs)", speed) or string.format("swing on, waiting (%.1fs)", speed)
+    end)
     spy(K.HUD, "SetPalette", function(s) if s ~= K.HUD.stealth then return "palette " .. (s and "stealth" or "normal") end end)
 
     fire("ADDON_LOADED", "Kapow")
@@ -870,6 +875,7 @@ local function fight(label, hidden)
     G.secret = hidden
     G.combat = true
     fire("PLAYER_REGEN_DISABLED")
+    fire("PLAYER_ENTER_COMBAT") -- auto-attack on: the swing timer
     G.stealth = false
     fire("UPDATE_STEALTH")
     G.auraList.target = {}
@@ -948,6 +954,7 @@ local function fight(label, hidden)
     fire("PLAYER_TARGET_CHANGED")
     G.combat = false
     G.secret = false
+    fire("PLAYER_LEAVE_COMBAT") -- auto-attack off
     fire("PLAYER_REGEN_ENABLED")
     energy(G.energy)
     step(0.5)

@@ -586,7 +586,8 @@ end
 
 -- What just happened to the target: CRIT!, DODGED!... The game does not say who dealt the
 -- hit, so this is only shown when you are alone and it can only be yours.
-function T:TargetHit(action, flag, amount)
+function T:TargetHit(action, flag, amount, school)
+    K.Swing:Seen(action, school) -- the swing timer (Swing.lua)
     if not K.db.hits or IsSecret(action) or Grouped() then return end
     local now = GetTime()
     if action == "WOUND" then
@@ -772,8 +773,8 @@ function T:Start()
 
     local hitThem = CreateFrame("Frame")
     hitThem:RegisterUnitEvent("UNIT_COMBAT", "target")
-    hitThem:SetScript("OnEvent", function(_, _, _, action, flag, amount)
-        T:TargetHit(action, flag, amount)
+    hitThem:SetScript("OnEvent", function(_, _, _, action, flag, amount, school)
+        T:TargetHit(action, flag, amount, school)
     end)
 
     local hitMe = CreateFrame("Frame")
@@ -783,5 +784,7 @@ function T:Start()
     end)
 
     K.Every(function(_, now) T:OnUpdate(now) end)
+    -- the swing timer: auto-attack on/off and weapon speed
+    K.Swing:Start()
     T:Refresh()
 end
