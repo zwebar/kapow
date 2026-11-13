@@ -4,8 +4,10 @@
 ## Version: 1.0.0
 ## IconTexture: Interface\Icons\Ability_Rogue_Eviscerate
 ## SavedVariables: KapowDB
+## SavedVariablesPerCharacter: KapowCharDB
 
 Core.lua
+Game.lua
 FX.lua
 HUD.lua
 Plate.lua

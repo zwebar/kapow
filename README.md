@@ -59,9 +59,17 @@ calculated with). So:
   exact value when it is readable, and the timing of power events and your casts when it is not.
 - What you did comes from your own spell casts, which are never hidden. Spells are matched by
   name, so every rank and the Forever-specific versions work.
-- Countdown boxes start from known durations and are corrected from the real aura or cooldown
-  whenever the game allows it (always out of combat, e.g. for Sap). In combat they are
-  estimates: a Gouge that breaks early or a stun that misses can leave its box up.
+- Countdown boxes run on the game's own timers. For a cooldown, the game hands over a timer
+  object; for a debuff or buff, the box finds the aura your cast created on the unit (aura IDs
+  are never hidden) and takes that aura's timer. The game then fills the bar and writes the
+  seconds itself, so they are exact even when the numbers are hidden from addons: talents,
+  ranks, diminishing returns and Forever's own spell versions included. An aura box goes away
+  when the aura leaves the unit (broken early, dispelled, or a stun that missed).
+- Before the game's timer arrives (a split second), and when it cannot (a box for a target you
+  have since switched away from, while the numbers are hidden), a box falls back to an estimate:
+  the real duration it learned the last time it could read one on this character, or the
+  spell's base value. The `KICK IN 3` countdown reads the game's cooldown when it may, and that
+  estimate otherwise.
 - The game says what happened to your target but not who did it. So in a party or raid,
   `CRIT!`/`DODGED!` and `K.O.!` are switched off, and `DENIED!` only shows when the game names
   you as the one who interrupted. Solo, they can only be yours.

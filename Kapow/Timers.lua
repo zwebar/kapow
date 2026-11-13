@@ -1,5 +1,10 @@
 -- Timers: comic caption boxes under the energy cells that count down crowd control,
 -- your own buffs and bleeds, and short cooldowns (KICK 7.2).
+--
+-- A box starts on an estimate (a duration learned earlier, or the spell's base value) and is
+-- bound to the game's own timer as soon as the game hands one over (Timers:Bind): from then
+-- on the game fills its bar and writes its seconds, so they are exact even in combat when the
+-- numbers are hidden from addons.
 local _, K = ...
 local Timers = {}
 K.Timers = Timers
@@ -30,14 +35,27 @@ local function NewChip()
     f.fill = f:CreateTexture(nil, "BACKGROUND", nil, 1)
     f.fill:SetPoint("TOPLEFT", 2, -2)
     f.fill:SetHeight(H - 4)
-    f.icon = f:CreateTexture(nil, "ARTWORK")
+    -- the same fill, driven by the game's timer once the box is bound
+    local gb = CreateFrame("StatusBar", nil, f)
+    gb:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2)
+    gb:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
+    gb:SetFrameLevel(f:GetFrameLevel())
+    gb:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    gb:SetMinMaxValues(0, 1)
+    gb:Hide()
+    f.gameBar = gb
+    local over = CreateFrame("Frame", nil, f)
+    over:SetAllPoints(f)
+    over:SetFrameLevel(f:GetFrameLevel() + 2)
+    f.over = over
+    f.icon = over:CreateTexture(nil, "ARTWORK")
     f.icon:SetSize(H - 6, H - 6)
     f.icon:SetPoint("LEFT", 3, 0)
     f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    f.label = K.Text(f, "OVERLAY", 11, "")
+    f.label = K.Text(over, "OVERLAY", 11, "")
     f.label:SetPoint("LEFT", f.icon, "RIGHT", 4, 0)
     f.label:SetTextColor(C.ink[1], C.ink[2], C.ink[3])
-    f.time = K.Text(f, "OVERLAY", 12, "")
+    f.time = K.Text(over, "OVERLAY", 12, "")
     f.time:SetPoint("RIGHT", -5, 0)
     f.time:SetTextColor(C.ink[1], C.ink[2], C.ink[3])
 
@@ -74,8 +92,18 @@ local function Find(key)
     end
 end
 
+local function Unbind(t)
+    if not t.bound then return end
+    t.bound, t.dur = false, nil
+    local chip = t.chip
+    K.Game.Unbind(chip.binding)
+    chip.gameBar:Hide()
+    chip.fill:Show()
+end
+
 local function Remove(i)
     local t = table.remove(active, i)
+    Unbind(t)
     t.chip:Hide()
     pool[#pool + 1] = t.chip
     Layout()
@@ -103,6 +131,8 @@ function Timers:Start(key, o)
     t.paper, t.bar = kind[1], kind[2]
     chip.bg:SetColorTexture(t.paper[1], t.paper[2], t.paper[3], 1)
     chip.fill:SetColorTexture(t.bar[1], t.bar[2], t.bar[3], 0.85)
+    chip.gameBar:SetStatusBarColor(t.bar[1], t.bar[2], t.bar[3], 0.85)
+    Unbind(t)
     if o.icon then
         chip.icon:SetTexture(o.icon)
         chip.icon:Show()
@@ -126,18 +156,72 @@ function Timers:Stop(key)
     if i then Remove(i) end
 end
 
+-- Remembers how long something really lasted, so the next estimate is right (talents,
+-- ranks and Forever's own spell versions included). Kept per character.
+local function Learn(t, total)
+    if t.learn and total and total > 0.5 then
+        KapowCharDB = KapowCharDB or {}
+        KapowCharDB.learned = KapowCharDB.learned or {}
+        KapowCharDB.learned[t.learn] = math.floor(total * 10 + 0.5) / 10
+    end
+end
+
+function Timers:Learned(learnKey)
+    return KapowCharDB and KapowCharDB.learned and KapowCharDB.learned[learnKey]
+end
+
 -- Swap in the real end time once the game tells us.
 function Timers:Adjust(key, expires, duration)
     local t = Find(key)
     if t then
         t.expires = expires
-        if duration and duration > 0 then t.duration = duration end
+        if duration and duration > 0 then
+            t.duration = duration
+            Learn(t, duration)
+        end
     end
 end
 
+-- Hands the box the game's own timer (a duration object). Returns false if the game would not
+-- take it, and the box keeps its estimate.
+function Timers:Bind(key, d)
+    local t = Find(key)
+    if not (t and d) then return false end
+    local chip = t.chip
+    if not K.Game.BindBar(chip.gameBar, d) then return false end
+    local binding = K.Game.BindText(chip.binding, chip.time, d, t.kind == "cd" and "READY" or "")
+    if not binding then
+        chip.gameBar:Hide()
+        return false
+    end
+    chip.binding = binding
+    t.bound, t.dur = true, d
+    chip.fill:Hide()
+    chip.gameBar:Show()
+    -- readable: the box can also end exactly on time
+    local rem, total = K.Game.Remaining(d), K.Game.Total(d)
+    if rem then
+        if rem <= 0 then
+            local _, i = Find(key)
+            Remove(i)
+            return true
+        end
+        t.expires = GetTime() + rem
+        if total then
+            t.duration = total
+            Learn(t, total)
+        end
+    end
+    return true
+end
+
+-- Seconds left: from the game's timer when it may be read, else the estimate.
 function Timers:Remaining(key)
     local t = Find(key)
-    return t and (t.expires - GetTime()) or 0
+    if not t then return 0 end
+    local rem = t.bound and K.Game.Remaining(t.dur)
+    if rem then return rem end
+    return t.expires - GetTime()
 end
 
 function Timers:Each(fn)
@@ -152,6 +236,18 @@ function Timers:OnUpdate(now)
     for i = #active, 1, -1 do
         local t = active[i]
         local rem = t.expires - now
+        local exact = t.bound and K.Game.Remaining(t.dur)
+        if exact then
+            rem = exact
+        elseif t.bound then
+            local active = K.Game.Active(t.dur)
+            if active == false then
+                rem = 0
+            elseif t.watched then
+                -- an aura box still on its unit: it ends when the aura leaves, not on a guess
+                rem = math.max(rem, 0.5)
+            end
+        end
         if rem <= 0 then
             Remove(i)
             if t.ready then
@@ -161,13 +257,16 @@ function Timers:OnUpdate(now)
             if t.onDone then t.onDone() end
         else
             local chip = t.chip
-            local frac = rem / t.duration
-            if frac > 1 then frac = 1 end
-            chip.fill:SetWidth(math.max(0.01, (W - 4) * frac))
-            if rem >= 10 then
-                chip.time:SetFormattedText("%d", math.floor(rem + 0.5))
-            else
-                chip.time:SetFormattedText("%.1f", rem)
+            if not t.bound then
+                -- the game is not drawing this one: our own estimate
+                local frac = rem / t.duration
+                if frac > 1 then frac = 1 end
+                chip.fill:SetWidth(math.max(0.01, (W - 4) * frac))
+                if rem >= 10 then
+                    chip.time:SetFormattedText("%ds", math.floor(rem + 0.5))
+                else
+                    chip.time:SetFormattedText("%.1f", rem)
+                end
             end
             -- crowd control about to break: the box blinks red
             if t.kind == "cc" and rem < 1.5 then

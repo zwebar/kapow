@@ -340,6 +340,54 @@ function IMPL.SetRotation(self, r) num(r, "rotation") end
 function IMPL.SetTexCoord(self, a, b, c, d) num(a, "tc"); num(b, "tc"); num(c, "tc"); num(d, "tc") end
 function IMPL.SetMinMaxValues(self, a, b) num(a, "min"); num(b, "max") end
 function IMPL.SetValue(self, v) if not issecretvalue(v) then num(v, "value") end end
+
+-- The game's duration objects: they keep counting on the game clock. With hidden values, the
+-- addon gets secrets back from them, but widgets bound to them still show the real thing.
+local DurMT = {}
+DurMT.__index = DurMT
+local function newDur(start, total, hidden) return setmetatable({ s = start, t = total, hid = hidden }, DurMT) end
+local function durLeft(d) return math.max(0, d.s + d.t - clock) end
+local function durWrap(d, v) if d.hid then return secret(v) end return v end
+function DurMT:HasSecretValues() return self.hid and true or false end
+function DurMT:GetRemainingDuration() return durWrap(self, durLeft(self)) end
+function DurMT:GetTotalDuration() return durWrap(self, self.t) end
+function DurMT:IsActive() return durWrap(self, durLeft(self) > 0) end
+function DurMT:HasExpired() return durWrap(self, durLeft(self) <= 0) end
+function DurMT:IsZero() return self.t <= 0 end
+local function isDur(d) return getmetatable(d) == DurMT end
+
+function IMPL.SetTimerDuration(self, d, interp, dir)
+    if not isDur(d) then error("SetTimerDuration needs a duration object", 2) end
+    if interp ~= nil then num(interp, "interpolation") end
+    if dir ~= nil then num(dir, "direction") end
+    self.__timer = d
+end
+
+-- Text bindings: the game rewrites the font string from the duration every tick.
+local BINDINGS = {}
+local BindMT = {}
+BindMT.__index = BindMT
+local function bindText(b)
+    if not (b.on and b.fs and b.d) then return end
+    local r = durLeft(b.d)
+    local text
+    if r <= 0 then text = b.zero or "" elseif r >= 10 then text = string.format("%ds", math.floor(r + 0.5)) else text = string.format("%.1f", r) end
+    b.fs.__text = text
+end
+function BindMT:SetFontString(fs)
+    if getmetatable(fs) ~= WidgetMT or fs.__kind ~= "FontString" then error("SetFontString needs a font string", 2) end
+    self.fs = fs
+end
+function BindMT:SetFormatter(f) if type(f) ~= "table" then error("SetFormatter needs a formatter", 2) end end
+function BindMT:SetUpdateInterval(n) num(n, "interval") end
+function BindMT:SetZeroDurationText(t) self.zero = t end
+function BindMT:SetExpiredText(t) self.zero = t end
+function BindMT:SetDuration(d)
+    if not isDur(d) then error("SetDuration needs a duration object", 2) end
+    self.d = d
+    bindText(self)
+end
+function BindMT:SetEnabled(on) self.on = on and true or false; bindText(self) end
 local STRATA = { BACKGROUND = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true, FULLSCREEN = true, TOOLTIP = true }
 function IMPL.SetFrameStrata(self, s) if not STRATA[s] then error("strata " .. tostring(s), 2) end end
 local LOOP = { NONE = true, REPEAT = true, BOUNCE = true }
@@ -504,14 +552,52 @@ local function setup()
         local enough = G.energy >= (COSTS[name] or 0)
         return enough, not enough
     end)
+    local function cooldownOf(spell)
+        local name = type(spell) == "string" and spell or NAMES[spell]
+        local cd = name and G.cds[name]
+        if cd and cd.s + cd.t > clock then return cd end
+    end
     defineNS("C_Spell", "GetSpellCooldown", function(id)
-        if G.secret then return { startTime = secret(), duration = secret(), isEnabled = secret(), modRate = 1 } end
-        return { startTime = G.cdStart or clock, duration = G.cd or 0, isEnabled = true, modRate = 1 }
+        local cd = cooldownOf(id) or { s = 0, t = 0 }
+        if G.secret then return { startTime = secret(cd.s), duration = secret(cd.t), isEnabled = secret(true), modRate = 1 } end
+        return { startTime = cd.s, duration = cd.t, isEnabled = true, modRate = 1 }
+    end)
+    defineNS("C_Spell", "GetSpellCooldownDuration", function(id, ignoreGCD)
+        local cd = cooldownOf(id)
+        if cd then return newDur(cd.s, cd.t, G.secret) end
+        return newDur(clock, 0, G.secret)
+    end)
+    local FILTERS = { player = "HELPFUL|PLAYER", target = "HARMFUL|PLAYER" }
+    local function auraList(unit)
+        if unit == "target" and not G.target then return {} end
+        return G.auraList[unit] or {}
+    end
+    defineNS("C_UnitAuras", "GetUnitAuraInstanceIDs", function(unit, filter)
+        if FILTERS[unit] ~= filter then error("aura filter " .. tostring(filter) .. " for " .. tostring(unit), 2) end
+        local ids = {}
+        for _, a in ipairs(auraList(unit)) do ids[#ids + 1] = a.id end
+        return ids
+    end)
+    defineNS("C_UnitAuras", "GetAuraDuration", function(unit, id)
+        for _, a in ipairs(auraList(unit)) do
+            if a.id == id then return newDur(a.s, a.t, G.secret) end
+        end
+        error("RequiresValidUnitAuraInstance: no aura " .. tostring(id) .. " on " .. tostring(unit), 2)
     end)
     defineNS("C_UnitAuras", "GetAuraDataBySpellName", function(unit, name, filter)
         if filter ~= "HELPFUL" and filter ~= "HARMFUL|PLAYER" then error("aura filter " .. tostring(filter), 2) end
         if G.secret then return nil end
-        return G.auras[unit .. ":" .. name]
+        for _, a in ipairs(auraList(unit)) do
+            if a.name == name then return { expirationTime = a.s + a.t, duration = a.t } end
+        end
+    end)
+    defineNS("C_DurationUtil", "CreateDurationTextBinding", function()
+        local b = setmetatable({}, BindMT)
+        BINDINGS[#BINDINGS + 1] = b
+        return b
+    end)
+    defineNS("C_StringUtil", "CreateSecondsFormatter", function()
+        return setmetatable({}, { __index = function() return function() end end })
     end)
     defineNS("C_Secrets", "ShouldAurasBeSecret", function() return G.secret end)
 end
@@ -548,6 +634,14 @@ local function step(seconds)
         end
         table.sort(due, function(a, b) return a.at < b.at end)
         for _, t in ipairs(due) do call("C_Timer", t.fn) end
+        for _, b in ipairs(BINDINGS) do bindText(b) end
+        for unit, list in pairs(G.auraList) do
+            local gone = false
+            for i = #list, 1, -1 do
+                if list[i].s + list[i].t <= clock then table.remove(list, i); gone = true end
+            end
+            if gone then fire("UNIT_AURA", unit, {}) end
+        end
         local ups = {}
         for f in pairs(UPDATERS) do ups[#ups + 1] = f end
         for _, f in ipairs(ups) do
@@ -570,8 +664,9 @@ local function boot(class)
     EVENTS, UPDATERS, PLAYING, TIMERS = {}, {}, {}, {}
     for i = #ALL, 1, -1 do ALL[i] = nil end
     G = { energy = 100, maxEnergy = 100, cp = 0, secret = false, target = false, dead = false, casting = false,
-        stealth = false, combat = false, auras = {}, class = class }
-    KapowDB, KapowHUD = nil, nil
+        stealth = false, combat = false, auraList = { player = {}, target = {} }, cds = {}, nextAura = 100, class = class }
+    KapowDB, KapowCharDB, KapowHUD = nil, nil, nil
+    BINDINGS = {}
     setup()
     K = {}
     for _, f in ipairs(FILES) do
@@ -598,6 +693,12 @@ local function boot(class)
     spy(K.Timers, "Start", function(key, o) return string.format("box   %s  %s %.1fs", key, o.label, o.duration) end)
     spy(K.Timers, "Stop", function(key) return K.Timers:Get(key) and ("box   " .. key .. " removed") or nil end)
     spy(K.Timers, "Adjust", function(key, exp, dur) return string.format("box   %s corrected to %.1fs left", key, exp - clock) end)
+    spy(K.Timers, "Bind", function(key, d)
+        local t = K.Timers:Get(key)
+        if t and not t.bound and isDur(d) then
+            return string.format("box   %s on the game's timer: %.1fs left%s", key, durLeft(d), d.hid and " (hidden from addon)" or "")
+        end
+    end)
     spy(K.HUD, "SetFull", function(full) if full ~= K.HUD.full then return "full  " .. tostring(full) end end)
     spy(K.HUD, "SetPrompt", function(text, cast, ...)
         if text == K.HUD.promptText and cast == K.HUD.promptCast and (... or "go") == (K.HUD.promptMode or "go") then return nil end
@@ -639,8 +740,20 @@ local function energy(v) G.energy = math.max(0, math.min(G.maxEnergy, v)); power
 local function combo(v) G.cp = v; power("COMBO_POINTS") end
 local function tick() energy(G.energy + 20) end
 -- castFirst: whether the cast event arrives before the power change
+-- The game's real cooldowns here differ from Kapow's built-in values on purpose (as if
+-- talented), so the test shows which one the boxes follow.
+local REAL_CD = { Kick = 8, Gouge = 10, ["Kidney Shot"] = 20, Feint = 10 }
+-- Puts an aura on a unit, as if the game applied it.
+local function aura(unit, name, dur)
+    G.nextAura = G.nextAura + 1
+    table.insert(G.auraList[unit], { id = G.nextAura, name = name, s = clock, t = dur })
+    fire("UNIT_AURA", unit, {})
+    return G.nextAura
+end
 local function cast(id, castFirst, cp)
-    local c = COSTS[NAMES[id] or ""] or 0
+    local name = NAMES[id] or ""
+    if REAL_CD[name] then G.cds[name] = { s = clock, t = REAL_CD[name] } end
+    local c = COSTS[name] or 0
     local function ev() fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-0", id) end
     if castFirst then ev() end
     if c > 0 then energy(G.energy - c) end
@@ -667,9 +780,9 @@ local function fight(label, hidden)
     fire("PLAYER_REGEN_DISABLED")
     G.stealth = false
     fire("UPDATE_STEALTH")
+    G.auraList.target = {}
     cast(1833, false, 2)
-    if not hidden then G.auras["target:Cheap Shot"] = { expirationTime = clock + 4, duration = 4 } end
-    fire("UNIT_AURA", "target", {})
+    aura("target", "Cheap Shot", 4)
     step(0.8)
     tick() step(0.7)
     cast(1757, true, 3) -- rank 2 Sinister Strike: matched by name
@@ -683,8 +796,6 @@ local function fight(label, hidden)
     G.casting = true
     fire("UNIT_SPELLCAST_START", "target", "Cast-1", 133, 1)
     step(0.6)
-    G.cd = 10
-    G.cdStart = clock
     cast(1766, false)
     G.casting = false
     fire("UNIT_SPELLCAST_INTERRUPTED", "target", "Cast-1", 133)
@@ -692,9 +803,19 @@ local function fight(label, hidden)
     step(0.8)
     tick() step(2) tick() step(0.3)
     cast(1776, true, 4) -- Gouge, with Improved Gouge making it 5.5s
-    if not hidden then G.auras["target:Gouge"] = { expirationTime = clock + 5.5, duration = 5.5 } end
+    step(0.05)
+    aura("target", "Gouge", 5.5)
+    step(0.3)
+    local gb = K.Timers:Get("aura:gouge")
+    if not (gb and gb.bound) then fail("Gouge box did not take the game's timer") end
+    local gt = gb and tostring(real(gb.chip.time.__text))
+    if not (gt and (gt:find("^5%.") or gt:find("^4%.9"))) then fail("Gouge box shows " .. tostring(gt) .. ", expected the real ~5.2") end
+    step(0.65)
+    log("(Gouge breaks early)")
+    for i, a in ipairs(G.auraList.target) do if a.name == "Gouge" then table.remove(G.auraList.target, i) break end end
     fire("UNIT_AURA", "target", {})
-    step(1)
+    step(0.1)
+    if K.Timers:Get("aura:gouge") then fail("Gouge box stayed after the aura broke") end
     fire("UNIT_COMBAT", "player", "PARRY", "", 0, 1)
     step(0.7)
     tick() step(2) tick() step(0.2)
@@ -706,10 +827,9 @@ local function fight(label, hidden)
     tick() step(2) tick() step(0.3)
     combo(2)
     cast(6774, true, 0) -- Slice and Dice rank 2: cast event first
-    if not hidden then G.auras["player:Slice and Dice"] = { expirationTime = clock + 12, duration = 12 } end
-    fire("UNIT_AURA", "player", {})
+    aura("player", "Slice and Dice", 12)
     step(1.4)
-    -- a Kidney Shot that misses (readable auras: the box should go away)
+    -- a Kidney Shot that misses: no stun appears, so its box goes away
     combo(3)
     tick()
     cast(8643, true, 0)
@@ -739,15 +859,19 @@ local function fight(label, hidden)
     G.target, G.dead = true, false
     fire("PLAYER_TARGET_CHANGED")
     energy(100)
-    cast(6770, false)
-    G.auras["target:Sap"] = { expirationTime = clock + 45, duration = 45 }
-    fire("UNIT_AURA", "target", {})
+    G.auraList.target = {}
+    aura("target", "Rupture", 30) -- already on it from earlier: not the Sap
+    fire("PLAYER_TARGET_CHANGED")
+    cast(6770, false) -- rank 1, so the built-in guess is 25s; the game says 45
+    step(0.1)
+    aura("target", "Sap", 45)
     step(1)
     G.target = false
     fire("PLAYER_TARGET_CHANGED")
     step(50)
     for _, l in ipairs(LOG) do say(l) end
-    G.auras = {}
+    G.auraList = { player = {}, target = {} }
+    G.cds = {}
 end
 
 -- In a party: effects that cannot be pinned on you stay off.
@@ -859,9 +983,11 @@ local function casts()
     try(2050, true, false, "Lesser Heal, hidden")
     try(133, true, false, "Fireball, hidden")
     log("(Kick on cooldown: Gouge instead)")
+    G.cds.Kick = { s = clock, t = 6 }
     K.Timers:Start("cd:kick", { label = "KICK", duration = 6, kind = "cd" })
     try(2050, false, false, "Lesser Heal, readable")
     log("(Kick and Gouge on cooldown, 2 combo points: Kidney Shot)")
+    G.cds.Gouge = { s = clock, t = 6 }
     K.Timers:Start("cd:gouge", { label = "GOUGE", duration = 6, kind = "cd" })
     G.cp = 2
     fire("UNIT_POWER_UPDATE", "player", "COMBO_POINTS")
@@ -876,6 +1002,7 @@ local function casts()
     fire("UNIT_SPELLCAST_STOP", "target", "Cast-9", 2050, 1)
     step(3)
     log("(Kick is back mid-cast: the box switches to KICK IT!)")
+    G.cds.Kick = { s = clock, t = 1 }
     K.Timers:Start("cd:kick", { label = "KICK", duration = 1, kind = "cd" })
     G.casting, G.castID, G.castAt = true, 133, clock
     fire("UNIT_SPELLCAST_START", "target", "Cast-9", 133, 1)
@@ -1056,6 +1183,7 @@ local function snapshot(label)
                         l, b, rr, t = rect(f)
                         local mm, val = f.__v.MinMaxValues or { 0, 1 }, real((f.__v.Value or { 0 })[1]) or 0
                         local frac = (val - mm[1]) / math.max(0.0001, mm[2] - mm[1])
+                        if f.__timer then frac = durLeft(f.__timer) / math.max(0.0001, f.__timer.t) end
                         frac = math.max(0, math.min(1, frac))
                         rr = l + (rr - l) * frac
                         it.crop = frac

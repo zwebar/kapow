@@ -219,62 +219,158 @@ end
 
 T.Announce = Announce
 
+-- Cooldown boxes: start on the cooldown learned last time (or the spell's base value), then
+-- take the game's own cooldown timer as soon as it exists.
+local function BindCooldown(key, spell)
+    local d = K.Game.SpellCooldown(spell)
+    if d then return Timers:Bind(key, d) end
+    -- no duration objects in this client: read the numbers if they are not hidden
+    if not (C_Spell and C_Spell.GetSpellCooldown) then return false end
+    local ok, info = pcall(C_Spell.GetSpellCooldown, spell)
+    if not ok or IsSecret(info) or type(info) ~= "table" then return false end
+    local start, dur = info.startTime, info.duration
+    if IsSecret(start) or IsSecret(dur) or type(start) ~= "number" or type(dur) ~= "number" then return false end
+    if dur > 2 and start + dur > GetTime() + 1 then Timers:Adjust(key, start + dur, dur) end
+    return true
+end
+
 local function StartCooldown(def, spellID)
     local key = "cd:" .. def.key
     Timers:Start(key, {
-        label = def.short, icon = def.icon, duration = def.cd, kind = "cd",
-        ready = def.short .. " READY!",
+        label = def.short, icon = def.icon, kind = "cd", ready = def.short .. " READY!",
+        duration = Timers:Learned(key) or def.cd, learn = key, spell = def.name or spellID,
     })
-    -- Use the real cooldown if the game will say (talents can shorten it).
-    K.After(0.15, function()
-        if not (C_Spell and C_Spell.GetSpellCooldown) then return end
-        local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
-        if not ok or IsSecret(info) or type(info) ~= "table" then return end
-        local start, dur = info.startTime, info.duration
-        if IsSecret(start) or IsSecret(dur) or type(start) ~= "number" or type(dur) ~= "number" then return end
-        if dur > 2 and start + dur > GetTime() + 1 then Timers:Adjust(key, start + dur, dur) end
+    K.After(0.15, function() BindCooldown(key, def.name or spellID) end)
+end
+
+-- Cooldowns changed (Preparation, a reset, a talent): re-read every cooldown box.
+function T:CooldownsChanged()
+    Timers:Each(function(t)
+        if t.kind == "cd" and t.spell then BindCooldown(t.key, t.spell) end
     end)
+end
+
+--------------------------------------------------------------------------------
+-- Aura boxes
+--
+-- The IDs of a unit's auras are never hidden, so the debuff (or buff) a cast created shows up
+-- as a new ID on that unit right after the cast. The box is then bound to the game's timer for
+-- that aura, and goes away when the aura does (broken, dispelled, or over). Without IDs the
+-- box falls back to the estimate, checked against the aura by name when that is readable.
+--------------------------------------------------------------------------------
+local AURAS = {
+    player = { filter = "HELPFUL|PLAYER", seen = {} },
+    target = { filter = "HARMFUL|PLAYER", seen = {} },
+}
+local CLAIM_WINDOW = 1.5 -- seconds for a cast's aura to appear before we decide it did not land
+
+local function AuraEstimate(def, spellID, cp)
+    local dur = def.aura.dur
+    local learnKey = "aura:" .. def.key
+    if type(dur) == "function" then
+        dur = dur(math.max(cp, 1), spellID)
+        learnKey = learnKey .. ":" .. math.max(cp, 1) -- finishers last longer with more points
+    end
+    return Timers:Learned(learnKey) or dur, learnKey
 end
 
 local function StartAura(def, spellID, cp)
     local a = def.aura
-    local dur = a.dur
-    if type(dur) == "function" then dur = dur(math.max(cp, 1), spellID) end
+    local key = "aura:" .. def.key
+    local dur, learnKey = AuraEstimate(def, spellID, cp)
     if not dur or dur <= 0 then return end
-    Timers:Start("aura:" .. def.key, {
-        label = a.short, icon = def.icon, duration = dur, kind = a.kind,
-        unit = a.unit, spell = def.name, attached = true, born = GetTime(),
+    -- recasting on the same unit (Slice and Dice again) may refresh the aura it already has
+    local old = Timers:Get(key)
+    local prev = old and old.onUnit and old.auraID or nil
+    local t = Timers:Start(key, {
+        label = a.short, icon = def.icon, duration = dur, kind = a.kind, learn = learnKey,
+        unit = a.unit, spell = def.name, born = GetTime(), onUnit = true,
     })
-    K.After(0.25, function() T:RefineAuras(a.unit) end)
-    K.After(0.7, function() T:RefineAuras(a.unit) end)
+    if not t then return end
+    t.auraID, t.prevID = nil, prev
+    T:ScanAuras(a.unit)
+    K.After(0.1, function() T:ScanAuras(a.unit) end)
+    K.After(0.5, function() T:ScanAuras(a.unit) end)
+    K.After(CLAIM_WINDOW + 0.05, function() T:ScanAuras(a.unit) end)
 end
 
--- Checks our countdown boxes against the unit's real auras, when those are readable:
--- fixes the end time, and drops a box whose effect never landed or has broken.
-function T:RefineAuras(unit)
+-- Fallback when the game gives no aura IDs: match by name when that is readable.
+local function RefineByName(unit)
     if not (C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName) then return end
-    local hidden = true
-    if C_Secrets and C_Secrets.ShouldAurasBeSecret then
-        local ok, v = pcall(C_Secrets.ShouldAurasBeSecret)
-        if ok and not IsSecret(v) then hidden = v and true or false end
-    end
     local now = GetTime()
     local filter = (unit == "player") and "HELPFUL" or "HARMFUL|PLAYER"
     Timers:Each(function(t)
-        if t.unit ~= unit or not t.spell then return end
+        if t.unit ~= unit or not t.spell or not t.onUnit then return end
         local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, t.spell, filter)
-        if not ok or IsSecret(aura) then return end
-        if type(aura) == "table" then
-            local exp, dur = aura.expirationTime, aura.duration
-            if not IsSecret(exp) and not IsSecret(dur) and type(exp) == "number" and type(dur) == "number"
-                and dur > 0 and exp > now then
-                t.attached = true
-                Timers:Adjust(t.key, exp, dur)
-            end
-        elseif aura == nil and t.attached and not hidden and now - t.born > 0.5 then
-            Timers:Stop(t.key)
+        if not ok or IsSecret(aura) or type(aura) ~= "table" then return end
+        local exp, dur = aura.expirationTime, aura.duration
+        if not IsSecret(exp) and not IsSecret(dur) and type(exp) == "number" and type(dur) == "number"
+            and dur > 0 and exp > now then
+            Timers:Adjust(t.key, exp, dur)
         end
     end)
+end
+
+-- fresh: the unit just changed (new target); auras it already has are not new.
+function T:ScanAuras(unit, fresh)
+    local a = AURAS[unit]
+    if not a then return end
+    local ids = K.Game.AuraIDs(unit, a.filter)
+    if not ids then return RefineByName(unit) end
+    local now = GetTime()
+    if fresh then
+        for id in pairs(a.seen) do a.seen[id] = nil end
+    end
+    local present = {}
+    for _, id in ipairs(ids) do
+        if not IsSecret(id) then
+            present[id] = true
+            if not a.seen[id] then a.seen[id] = fresh and 0 or now end
+        end
+    end
+    for id in pairs(a.seen) do
+        if not present[id] then a.seen[id] = nil end
+    end
+
+    -- boxes on this unit, oldest first
+    local boxes, claimed = {}, {}
+    Timers:Each(function(t)
+        if t.unit == unit and t.onUnit then
+            boxes[#boxes + 1] = t
+            if t.auraID then claimed[t.auraID] = true end
+        end
+    end)
+    table.sort(boxes, function(x, y) return (x.born or 0) < (y.born or 0) end)
+
+    for _, t in ipairs(boxes) do
+        if t.auraID then
+            if present[t.auraID] then
+                -- still there: re-read its timer (it may have been refreshed)
+                Timers:Bind(t.key, K.Game.AuraDuration(unit, t.auraID))
+            else
+                Timers:Stop(t.key) -- the aura is gone: broken early, dispelled, or over
+            end
+        else
+            local pick
+            if t.prevID and present[t.prevID] and not claimed[t.prevID] then
+                pick = t.prevID
+            else
+                local best
+                for id, seenAt in pairs(a.seen) do
+                    if not claimed[id] and seenAt >= (t.born or now) - 0.3 and (not best or seenAt < best) then
+                        pick, best = id, seenAt
+                    end
+                end
+            end
+            if pick then
+                claimed[pick] = true
+                t.auraID, t.watched = pick, true
+                Timers:Bind(t.key, K.Game.AuraDuration(unit, pick))
+            elseif now - (t.born or now) > CLAIM_WINDOW then
+                Timers:Stop(t.key) -- it never landed (missed, resisted, immune)
+            end
+        end
+    end
 end
 
 local function Denied()
@@ -360,10 +456,19 @@ end
 -- Ways to stop a cast, best first. Gouge and Kidney Shot interrupt too.
 local STOP_WITH = { { "kick", "KICK IT!" }, { "gouge", "GOUGE IT!" }, { "kidney", "KIDNEY SHOT!" } }
 
+-- Seconds until a spell's cooldown is over: the game's own timer when it may be read, else
+-- the cooldown box's estimate.
+local function CooldownLeft(key)
+    local def = Spells:Get(key)
+    local rem = def and K.Game.Remaining(K.Game.SpellCooldown(def.name or def.id))
+    if rem then return rem end
+    return math.max(0, Timers:Remaining("cd:" .. key))
+end
+
 -- Known, off cooldown, and enough energy (and combo points, for Kidney Shot).
 local function Ready(key)
     local def = Spells:Get(key)
-    if not def or Timers:Remaining("cd:" .. key) > 0 then return false end
+    if not def or CooldownLeft(key) > 0.1 then return false end
     if not (C_Spell and C_Spell.IsSpellUsable) then return false end
     -- by name, so the highest rank you know is the one checked
     local ok, usable = pcall(C_Spell.IsSpellUsable, def.name or def.id)
@@ -386,7 +491,7 @@ function T:UpdatePrompt()
                 end
             end
             if not text and Spells:Get("kick") then
-                local wait = Timers:Remaining("cd:kick")
+                local wait = CooldownLeft("kick")
                 text = wait > 0 and string.format("KICK IN %d", math.ceil(wait)) or "NEED ENERGY"
                 mode = "wait"
             end
@@ -437,12 +542,12 @@ function T:TargetChanged()
     T.cast = T.casting and ReadCast() or nil
     T:UpdatePrompt()
     T:Combo(true)
-    -- Countdowns keep running for the old target (that is what a sap timer is for), but
-    -- they are no longer checked against this target's auras unless it carries them too.
+    -- Boxes for the old target keep running on the game's timer (that is what a sap timer is
+    -- for); they just can no longer be checked against the unit, which is someone else now.
     Timers:Each(function(t)
-        if t.unit == "target" then t.attached = false end
+        if t.unit == "target" then t.onUnit, t.watched = false, false end
     end)
-    T:RefineAuras("target")
+    T:ScanAuras("target", true)
 end
 
 function T:TargetHealth()
@@ -543,6 +648,16 @@ function T:OnUpdate(now)
         HUD:SetTickClock(nil)
     end
 
+    -- Riposte: the box lasts as long as the game says Riposte can be used
+    if Timers:Get("riposte") and now - (T.riposteAt or 0) > 0.2 then
+        T.riposteAt = now
+        local rip = Spells:Get("riposte")
+        local ok, usable = pcall(C_Spell.IsSpellUsable, rip.name or rip.id)
+        if ok and not IsSecret(usable) and not usable and Timers:Remaining("riposte") < 4.8 then
+            Timers:Stop("riposte")
+        end
+    end
+
     -- keep the prompt honest
     if T.casting and now - (T.promptAt or 0) > 0.2 then
         T.promptAt = now
@@ -566,6 +681,7 @@ function T:Start()
     main:RegisterEvent("PLAYER_REGEN_ENABLED")
     main:RegisterEvent("UPDATE_STEALTH")
     main:RegisterEvent("UI_ERROR_MESSAGE")
+    main:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     main:SetScript("OnEvent", function(_, event, a, b)
         if event == "PLAYER_ENTERING_WORLD" then
             T:Refresh()
@@ -579,6 +695,8 @@ function T:Start()
             HUD.inCombat = false
         elseif event == "UPDATE_STEALTH" then
             T:Stealth()
+        elseif event == "SPELL_UPDATE_COOLDOWN" then
+            T:CooldownsChanged()
         elseif event == "UI_ERROR_MESSAGE" then
             if not IsSecret(b) and b ~= nil and b == ERR_OUT_OF_ENERGY then HUD:Error() end
         end
@@ -594,7 +712,7 @@ function T:Start()
         if event == "UNIT_SPELLCAST_SUCCEEDED" then
             T:Cast(b)
         elseif event == "UNIT_AURA" then
-            T:RefineAuras("player")
+            T:ScanAuras("player")
         elseif event == "UNIT_MAXPOWER" then
             T:Energy()
         else
@@ -625,7 +743,7 @@ function T:Start()
         elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
             T:CastChanged()
         elseif event == "UNIT_AURA" then
-            T:RefineAuras("target")
+            T:ScanAuras("target")
         elseif event == "UNIT_HEALTH" then
             T:TargetHealth()
         else
