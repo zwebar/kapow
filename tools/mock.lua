@@ -678,6 +678,16 @@ local function setup()
         return setmetatable({}, { __index = function() return function() end end })
     end)
     defineNS("C_Secrets", "ShouldAurasBeSecret", function() return G.secret end)
+    -- game settings: the floating combat text one starts on, as in a fresh client
+    CVARS = CVARS or { floatingCombatTextCombatDamage = "1" }
+    defineNS("C_CVar", "GetCVar", function(name) return CVARS[name] end)
+    defineNS("C_CVar", "SetCVar", function(name, value)
+        if CVARS[name] == nil then error("unknown setting " .. tostring(name), 2) end
+        CVARS[name] = tostring(value)
+        log("setting " .. name .. " = " .. tostring(value))
+        return true
+    end)
+    define("InCombatLockdown", function() return G.combat end)
 end
 
 --------------------------------------------------------------------------------
@@ -1185,7 +1195,7 @@ local function commands()
     slash("ticker")
     slash("arc 12")
     slash("arc 999")
-    for _, c in ipairs({ "words", "words", "hits", "hits", "prompt", "prompt", "reset" }) do slash(c) end
+    for _, c in ipairs({ "words", "words", "hits", "hits", "prompt", "prompt", "native", "native", "reset" }) do slash(c) end
     step(1)
     for _, l in ipairs(LOG) do say(l) end
 end

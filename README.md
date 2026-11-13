@@ -73,6 +73,7 @@ timer, where combo points show and how high the arc sits, the word bursts and th
 | `/kapow words` | toggle the ability bursts |
 | `/kapow hits` | toggle `CRIT!` / `DODGED!` |
 | `/kapow dmg` | toggle the small damage numbers |
+| `/kapow native` | hide (or bring back) the game's own damage numbers over the target |
 | `/kapow prompt` | toggle `KICK IT!` |
 | `/kapow reset` | default position and size |
 

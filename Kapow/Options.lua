@@ -16,6 +16,7 @@ local APPLY = {
     ticker = function() if K.built then K.HUD:SetTickClock(K.HUD.lastTick) end end,
     pips = function() if K.built then K.Plate:Reanchor() end end,
     arcY = function() if K.built then K.Plate:Reanchor() end end,
+    hideNative = function() K.ApplyNativeDamage() end,
 }
 
 function O:Build()
@@ -73,6 +74,8 @@ function O:Build()
         .. "since the game does not say whose hit it was.")
     Checkbox("dmg", "Damage numbers", "Small numbers for your ordinary hits (crits get the big CRIT! burst). "
         .. "Only when you are not in a group.")
+    Checkbox("hideNative", "Hide the game's own damage numbers", "Switches off the numbers the game shows over "
+        .. "your target, so only Kapow's are left. Untick to bring the game's back as they were.")
     Checkbox("prompt", "KICK IT! cast bar", "Shows what your target is casting, flags heals, and tells you to "
         .. "Kick, Gouge or Kidney Shot it.")
 

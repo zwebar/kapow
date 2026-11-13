@@ -35,6 +35,7 @@ local DEFAULTS = {
     words = true,      -- POW! bursts for abilities
     hits = true,       -- CRIT! / DODGED! from what happens to the target
     dmg = true,        -- small damage numbers for your ordinary hits
+    hideNative = false, -- switch off the game's own damage numbers over the target
     prompt = true,     -- KICK IT! when the target starts casting
 }
 K.DEFAULTS = DEFAULTS
@@ -216,6 +217,7 @@ boot:SetScript("OnEvent", function(_, event, name)
     elseif event == "PLAYER_LOGIN" then
         if not K.db then InitDB() end
         K.Options:Register() -- no-op if already done when the settings loaded
+        if K.db.hideNative then K.ApplyNativeDamage() end
         local _, class = UnitClass("player")
         K.isRogue = (class == "ROGUE")
         if K.isRogue then
@@ -224,6 +226,52 @@ boot:SetScript("OnEvent", function(_, event, name)
         end
     end
 end)
+
+--------------------------------------------------------------------------------
+-- The game's own damage numbers (over the target). With hideNative on, they are switched off
+-- in the game's settings; the value they had is remembered and put back when it is turned off.
+--------------------------------------------------------------------------------
+local NATIVE = "floatingCombatTextCombatDamage"
+
+local function GetCV(name)
+    local v
+    if C_CVar and C_CVar.GetCVar then v = K.Safe(C_CVar.GetCVar, name)
+    elseif GetCVar then v = K.Safe(GetCVar, name) end
+    if K.IsSecret(v) then return nil end
+    return v
+end
+
+local function SetCV(name, value)
+    if C_CVar and C_CVar.SetCVar then return K.Safe(C_CVar.SetCVar, name, value) end
+    if SetCVar then return K.Safe(SetCVar, name, value) end
+end
+
+local waitFrame
+-- Applies the hideNative setting. Returns false if the game has no such setting.
+function K.ApplyNativeDamage()
+    if InCombatLockdown and InCombatLockdown() then
+        -- some settings cannot be changed in combat: do it as soon as combat ends
+        waitFrame = waitFrame or CreateFrame("Frame")
+        waitFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        waitFrame:SetScript("OnEvent", function(f)
+            f:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            K.ApplyNativeDamage()
+        end)
+        return true
+    end
+    local cur = GetCV(NATIVE)
+    if cur == nil then return false end
+    if K.db.hideNative then
+        if cur ~= "0" then
+            K.db.nativeWas = cur
+            SetCV(NATIVE, "0")
+        end
+    elseif K.db.nativeWas ~= nil then
+        SetCV(NATIVE, K.db.nativeWas)
+        K.db.nativeWas = nil
+    end
+    return true
+end
 
 --------------------------------------------------------------------------------
 -- /kapow
@@ -305,6 +353,13 @@ SlashCmdList["KAPOW"] = function(msg)
         Toggle("hits", "crit/dodge words")
     elseif cmd == "dmg" or cmd == "damage" then
         Toggle("dmg", "damage numbers")
+    elseif cmd == "native" then
+        K.db.hideNative = not K.db.hideNative
+        if K.ApplyNativeDamage() then
+            K.Print(K.db.hideNative and "the game's own damage numbers are off" or "the game's own damage numbers are back")
+        else
+            K.Print("this client has no setting for its damage numbers")
+        end
     elseif cmd == "prompt" then
         Toggle("prompt", "KICK IT! prompt")
     elseif cmd == "reset" then
@@ -323,7 +378,7 @@ SlashCmdList["KAPOW"] = function(msg)
         K.Print("  /kapow fx 0.8 - size of the word bursts")
         K.Print("  /kapow pips plate | hud | both - where combo points show   /kapow arc 10 - arc height")
         K.Print("  /kapow words | hits | prompt | ticker - toggle ability words, CRIT!/DODGED!, KICK IT!, tick timer")
-        K.Print("  /kapow dmg - toggle the small damage numbers")
+        K.Print("  /kapow dmg - toggle the small damage numbers   /kapow native - hide the game's own")
         K.Print("  /kapow reset - back to the default spot")
         if K.isRogue == false then K.Print("(not a rogue: the HUD only runs for rogues, but the demo works)") end
     end
