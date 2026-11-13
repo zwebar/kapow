@@ -15,3 +15,4 @@ Timers.lua
 Spells.lua
 Tracker.lua
 Demo.lua
+Options.lua

@@ -36,6 +36,7 @@ local DEFAULTS = {
     hits = true,       -- CRIT! / DODGED! from what happens to the target
     prompt = true,     -- KICK IT! when the target starts casting
 }
+K.DEFAULTS = DEFAULTS
 
 -- Some values are hidden from addons in combat ("secret"): they can be handed to widgets,
 -- but any maths or comparison on them is an error. Everything that reads the game checks first.
@@ -186,6 +187,7 @@ local function InitDB()
         if KapowDB[k] == nil then KapowDB[k] = v end
     end
     K.db = KapowDB
+    K.Options:Register()
 end
 
 -- Builds the HUD the first time it is needed.
@@ -206,6 +208,7 @@ boot:SetScript("OnEvent", function(_, event, name)
         if name == ADDON then InitDB() end
     elseif event == "PLAYER_LOGIN" then
         if not K.db then InitDB() end
+        K.Options:Register() -- no-op if already done when the settings loaded
         local _, class = UnitClass("player")
         K.isRogue = (class == "ROGUE")
         if K.isRogue then
@@ -228,7 +231,9 @@ SlashCmdList["KAPOW"] = function(msg)
     msg = (msg or ""):lower()
     local cmd, arg = msg:match("^(%S*)%s*(.-)$")
     if not K.db then InitDB() end
-    if cmd == "test" or cmd == "demo" then
+    if cmd == "options" or cmd == "config" or cmd == "settings" then
+        if not K.Options:Open() then K.Print("the options page is not available in this client; use the commands below") end
+    elseif cmd == "test" or cmd == "demo" then
         K.Build()
         K.Demo:Run()
     elseif cmd == "unlock" or cmd == "move" then
@@ -301,7 +306,8 @@ SlashCmdList["KAPOW"] = function(msg)
         end
         K.Print("position and scale reset")
     else
-        K.Print("commands:")
+        K.Print("commands (or Options > AddOns > Kapow):")
+        K.Print("  /kapow options - open the options page")
         K.Print("  /kapow test - play a demo of every effect")
         K.Print("  /kapow unlock | lock - move the HUD")
         K.Print("  /kapow scale 1.2 - resize   /kapow idle 0.35 - opacity out of combat")

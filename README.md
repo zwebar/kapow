@@ -43,6 +43,13 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
 Copy the `Kapow` folder into `World of Warcraft/_forever_/Interface/AddOns/` and restart the
 game. It only runs on rogues.
 
+## Options
+
+**Options > AddOns > Kapow** has the settings: lock and size the HUD, idle opacity, the tick
+timer, where combo points show and how high the arc sits, the word bursts and their size,
+`CRIT!`/`DODGED!`, the `KICK IT!` cast bar, and buttons to play the demo or reset the position.
+`/kapow options` opens it.
+
 ## Commands
 
 | | |

@@ -458,6 +458,80 @@ local function setup()
         return f
     end
     UIParent = new("Frame")
+
+    -- Blizzard's Settings panel is Lua in the client, not in the API docs: enough of it here
+    -- to build Kapow's page and flip its settings, with the same arguments the real one takes.
+    SETTINGS = { cats = {}, settings = {} }
+    local VarType = { Boolean = "boolean", String = "string", Number = "number" }
+    local function add(cat, init) table.insert(cat.inits, init) return init end
+    Settings = {
+        VarType = VarType,
+        RegisterVerticalLayoutCategory = function(name)
+            if type(name) ~= "string" then error("category name", 2) end
+            return { name = name, inits = {}, ID = 7, GetID = function(c) return c.ID end }
+        end,
+        RegisterAddOnCategory = function(cat) table.insert(SETTINGS.cats, cat) end,
+        RegisterAddOnSetting = function(cat, variable, key, tbl, kind, name, default)
+            if type(cat) ~= "table" or type(variable) ~= "string" or type(key) ~= "string" or type(tbl) ~= "table"
+                or type(name) ~= "string" then
+                error("RegisterAddOnSetting arguments", 2)
+            end
+            if kind ~= "boolean" and kind ~= "string" and kind ~= "number" then error("variable type " .. tostring(kind), 2) end
+            if type(default) ~= kind then error("default for " .. key .. " is " .. type(default) .. ", not " .. kind, 2) end
+            if tbl[key] == nil then tbl[key] = default end
+            if type(tbl[key]) ~= kind then error("saved " .. key .. " is not a " .. kind, 2) end
+            local s = { key = key, kind = kind, name = name, default = default }
+            function s:GetValue() return tbl[key] end
+            function s:SetValue(v)
+                if type(v) ~= kind then error("setting " .. key .. " to a " .. type(v), 2) end
+                tbl[key] = v
+                if s.cb then s.cb(s, v) end
+            end
+            function s:SetValueChangedCallback(fn) s.cb = fn end
+            SETTINGS.settings[key] = s
+            return s
+        end,
+        CreateCheckbox = function(cat, s, tip)
+            if s.kind ~= "boolean" then error("checkbox for a " .. s.kind, 2) end
+            return add(cat, { kind = "checkbox", setting = s })
+        end,
+        CreateSliderOptions = function(lo, hi, step)
+            return { lo = lo, hi = hi, step = step, SetLabelFormatter = function(o, label, fn)
+                if type(fn) ~= "function" then error("label formatter", 2) end
+                o.fmt = fn
+            end }
+        end,
+        CreateSlider = function(cat, s, o, tip)
+            if s.kind ~= "number" then error("slider for a " .. s.kind, 2) end
+            if s.default < o.lo or s.default > o.hi then error("default " .. s.key .. " outside the slider", 2) end
+            if o.fmt and type(o.fmt(s:GetValue())) ~= "string" then error("label formatter must return text", 2) end
+            return add(cat, { kind = "slider", setting = s, options = o })
+        end,
+        CreateDropdown = function(cat, s, optionsFn, tip)
+            local data = optionsFn()
+            local ok = false
+            for _, d in ipairs(data) do if d.value == s.default then ok = true end end
+            if not ok then error("dropdown default not among its options", 2) end
+            return add(cat, { kind = "dropdown", setting = s, data = data })
+        end,
+        CreateControlTextContainer = function()
+            local c = { data = {} }
+            function c:Add(v, label, tip) table.insert(self.data, { value = v, label = label, tooltip = tip }) end
+            function c:GetData() return self.data end
+            return c
+        end,
+        OpenToCategory = function(id) SETTINGS.opened = id end,
+    }
+    SettingsPanel = {
+        GetLayout = function(_, cat) return { AddInitializer = function(_, init) add(cat, init) end } end,
+        Close = function() SETTINGS.closed = true end,
+    }
+    MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Min = 4, Max = 5 } }
+    CreateSettingsListSectionHeaderInitializer = function(name) return { kind = "header", name = name } end
+    CreateSettingsButtonInitializer = function(name, text, click, tip)
+        if type(click) ~= "function" then error("button needs a click handler", 2) end
+        return { kind = "button", name = name, text = text, click = click }
+    end
     DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) log("chat: " .. msg:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end }
     GameFontNormalLarge = { GetFont = function() return "Fonts\\FRIZQT__.TTF", 16, "" end }
     STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
@@ -490,15 +564,19 @@ local function setup()
     NAMEPLATE = new("Frame", UIParent)
     NAMEPLATE:SetPoint("CENTER", UIParent, "BOTTOMLEFT", 640, 470)
     NAMEPLATE:SetSize(110, 26)
+    local border = NAMEPLATE:CreateTexture(nil, "BORDER")
+    border:SetColorTexture(0.02, 0.02, 0.03, 1)
+    border:SetPoint("BOTTOM", NAMEPLATE, "BOTTOM", 0, 1)
+    border:SetSize(104, 12)
     local hb = NAMEPLATE:CreateTexture(nil, "ARTWORK")
     hb:SetColorTexture(0.78, 0.12, 0.1, 1)
-    hb:SetPoint("BOTTOM", NAMEPLATE, "BOTTOM", 0, 3)
-    hb:SetSize(100, 8)
+    hb:SetPoint("BOTTOMLEFT", border, "BOTTOMLEFT", 2, 2)
+    hb:SetSize(74, 8)
     local nm = NAMEPLATE:CreateFontString(nil, "OVERLAY")
     nm:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
-    nm:SetPoint("BOTTOM", hb, "TOP", 0, 2)
+    nm:SetPoint("BOTTOM", border, "TOP", 0, 2)
     nm:SetTextColor(1, 0.25, 0.2)
-    nm:SetText("Defias Bandit")
+    nm:SetText("Defias Pillager")
     defineNS("C_NamePlate", "GetNamePlateForUnit", function(unit)
         if unit == "target" and G.target and G.plates then return NAMEPLATE end
         return nil
@@ -1022,6 +1100,56 @@ local function slash(msg)
     call("/kapow " .. msg, SlashCmdList.KAPOW, msg)
 end
 
+-- The page under Options > AddOns > Kapow: built, and every setting takes effect.
+local function options()
+    say("")
+    say("--- options page ---")
+    LOG = {}
+    t0 = clock
+    local cat = SETTINGS.cats[1]
+    if not cat then
+        fail("no options page registered" .. (K.Options.failed and (": " .. K.Options.failed) or ""))
+        return
+    end
+    local items = {}
+    for _, init in ipairs(cat.inits) do
+        items[#items + 1] = init.kind .. ":" .. (init.setting and init.setting.key or init.name or "")
+    end
+    say("  " .. cat.name .. ": " .. table.concat(items, ", "))
+    local S = SETTINGS.settings
+    for _, key in ipairs({ "locked", "scale", "idle", "ticker", "pips", "arcY", "words", "fx", "hits", "prompt" }) do
+        if not S[key] then fail("no setting for " .. key) end
+    end
+    S.scale:SetValue(1.4)
+    if KapowHUD.__scale ~= 1.4 then fail("Size did not resize the HUD") end
+    S.locked:SetValue(false)
+    if not K.HUD.mover.__shown then fail("unlocking did not show the mover") end
+    S.locked:SetValue(true)
+    G.target, G.plates = true, true
+    fire("PLAYER_TARGET_CHANGED")
+    step(0.1)
+    S.pips:SetValue("hud")
+    if K.Plate.attached then fail("combo points stayed on the nameplate") end
+    S.pips:SetValue("plate")
+    if not K.Plate.attached then fail("combo points did not go back to the nameplate") end
+    S.ticker:SetValue(false)
+    K.HUD:SetTickClock(clock)
+    if K.HUD.bolt.__shown then fail("tick timer still shown") end
+    S.ticker:SetValue(true)
+    S.words:SetValue(false)
+    if KapowDB.words ~= false then fail("Ability bursts did not change the saved setting") end
+    S.words:SetValue(true)
+    slash("options")
+    if SETTINGS.opened ~= 7 then fail("/kapow options did not open the page") end
+    for _, init in ipairs(cat.inits) do
+        if init.kind == "button" and init.name == "Try it out" then init.click() end
+    end
+    if not K.demo then fail("Play demo did not start the demo") end
+    step(16)
+    say("  every setting applied")
+    for _, l in ipairs(LOG) do say(l) end
+end
+
 local function commands()
     say("")
     say("--- slash commands ---")
@@ -1244,6 +1372,7 @@ grouped()
 casts()
 trickle()
 commands()
+options()
 local counts = string.format("%d frames, %d textures, %d font strings", COUNT.frames, COUNT.textures, COUNT.fontstrings)
 
 boot("WARRIOR")
