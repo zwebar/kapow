@@ -34,6 +34,7 @@ local DEFAULTS = {
     arcY = 2,          -- how high the arc sits above the nameplate
     words = true,      -- POW! bursts for abilities
     hits = true,       -- CRIT! / DODGED! from what happens to the target
+    dmg = true,        -- small damage numbers for your ordinary hits
     prompt = true,     -- KICK IT! when the target starts casting
 }
 K.DEFAULTS = DEFAULTS
@@ -302,6 +303,8 @@ SlashCmdList["KAPOW"] = function(msg)
         Toggle("words", "ability words")
     elseif cmd == "hits" then
         Toggle("hits", "crit/dodge words")
+    elseif cmd == "dmg" or cmd == "damage" then
+        Toggle("dmg", "damage numbers")
     elseif cmd == "prompt" then
         Toggle("prompt", "KICK IT! prompt")
     elseif cmd == "reset" then
@@ -320,6 +323,7 @@ SlashCmdList["KAPOW"] = function(msg)
         K.Print("  /kapow fx 0.8 - size of the word bursts")
         K.Print("  /kapow pips plate | hud | both - where combo points show   /kapow arc 10 - arc height")
         K.Print("  /kapow words | hits | prompt | ticker - toggle ability words, CRIT!/DODGED!, KICK IT!, tick timer")
+        K.Print("  /kapow dmg - toggle the small damage numbers")
         K.Print("  /kapow reset - back to the default spot")
         if K.isRogue == false then K.Print("(not a rogue: the HUD only runs for rogues, but the demo works)") end
     end

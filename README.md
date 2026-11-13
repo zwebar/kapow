@@ -28,8 +28,11 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
   happened (`CRIT!`, `DODGED!`, `DENIED!`, `K.O.!`) on the right. A new word replaces the old one
   on its side, so they never pile up, and nothing covers the middle of the screen or the unit
   frames.
-- **Hits** (solo only) – `CRIT!` with the number, `DODGED!`, `PARRIED!`, `MISS!`, and `K.O.!`
-  when the target drops.
+- **Hits** (solo only) – crits are loud: a big `CRIT!` burst with the number in large yellow
+  figures, stars and a jolt. Ordinary hits are kept quiet: a small ink-outlined number that
+  drifts up and fades just right of the HUD (`/kapow dmg` turns them off). Also `DODGED!`,
+  `PARRIED!`, `MISS!`, and `K.O.!` when the target drops. In combat the game hides damage
+  amounts from addons, but they are handed straight to the text, so the numbers still show.
 - **Kick** – `KICK IT!` flashes while your target is casting something you can kick. With Kick
   on cooldown it suggests `GOUGE IT!` or `KIDNEY SHOT!` instead, and if none of them is ready it
   stays up, dimmed, counting down (`KICK IN 3`) so you still see what is coming. The box is a comic cast bar: a caption tab says what to do, and the bar shows the
@@ -68,6 +71,7 @@ timer, where combo points show and how high the arc sits, the word bursts and th
 | `/kapow ticker` | toggle the energy tick timer under the cells |
 | `/kapow words` | toggle the ability bursts |
 | `/kapow hits` | toggle `CRIT!` / `DODGED!` |
+| `/kapow dmg` | toggle the small damage numbers |
 | `/kapow prompt` | toggle `KICK IT!` |
 | `/kapow reset` | default position and size |
 

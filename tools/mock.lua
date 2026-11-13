@@ -766,8 +766,8 @@ local function boot(class)
         end
     end
     local function str(v) return issecretvalue(v) and "<secret>" or tostring(v) end
-    spy(K.FX, "Word", function(text, o) return "WORD  " .. text .. (o and o.sub and ("  [" .. o.sub .. "]") or "") end)
-    spy(K.FX, "Pop", function(text) return "pop   " .. text end)
+    spy(K.FX, "Word", function(text, o) return "WORD  " .. text .. (o and o.sub and ("  [" .. str(o.sub) .. "]") or "") end)
+    spy(K.FX, "Pop", function(text) return "pop   " .. str(text) end)
     spy(K.Timers, "Start", function(key, o) return string.format("box   %s  %s %.1fs", key, o.label, o.duration) end)
     spy(K.Timers, "Stop", function(key) return K.Timers:Get(key) and ("box   " .. key .. " removed") or nil end)
     spy(K.Timers, "Adjust", function(key, exp, dur) return string.format("box   %s corrected to %.1fs left", key, exp - clock) end)
@@ -864,7 +864,11 @@ local function fight(label, hidden)
     step(0.8)
     tick() step(0.7)
     cast(1757, true, 3) -- rank 2 Sinister Strike: matched by name
-    fire("UNIT_COMBAT", "target", "WOUND", "CRITICAL", 187, 1)
+    fire("UNIT_COMBAT", "target", "WOUND", "CRITICAL", hide(187), 1)
+    step(0.4)
+    fire("UNIT_COMBAT", "target", "WOUND", "", hide(96), 1) -- ordinary hits: small numbers
+    step(0.3)
+    fire("UNIT_COMBAT", "target", "WOUND", "", hide(54), 1)
     step(0.5)
     fire("UI_ERROR_MESSAGE", 51, "Not enough energy")
     fire("UNIT_COMBAT", "target", "DODGE", "", 0, 1)

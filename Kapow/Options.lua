@@ -71,6 +71,8 @@ function O:Build()
     Slider("fx", "Burst size", "How big the word bursts are.", 0.5, 1.5, 0.05, Times)
     Checkbox("hits", "CRIT! and DODGED!", "Words for what happens to your target. Only when you are not in a group, "
         .. "since the game does not say whose hit it was.")
+    Checkbox("dmg", "Damage numbers", "Small numbers for your ordinary hits (crits get the big CRIT! burst). "
+        .. "Only when you are not in a group.")
     Checkbox("prompt", "KICK IT! cast bar", "Shows what your target is casting, flags heals, and tells you to "
         .. "Kick, Gouge or Kidney Shot it.")
 

@@ -53,8 +53,23 @@ local Show = {}
 T.Show = Show
 
 -- These are what happened, so they show on the right; your own abilities show on the left.
+-- A crit is meant to be loud: a big burst with the number in large yellow figures under it,
+-- stars and a jolt. amount may be hidden from us in combat; the burst can still show it.
 function Show.Crit(amount)
-    FX:Word("CRIT!", { side = 1, color = C.red, shape = "burst2", size = 1.0, sub = amount, textColor = C.yellow })
+    local x, y = FX:Word("CRIT!", { side = 1, color = C.red, shape = "burst2", size = 1.15, sub = amount,
+        subSize = 24, subFlags = "THICKOUTLINE", subColor = C.yellow, textColor = C.yellow })
+    if x then FX:Sparks(x, y, C.yellow, 5, 50) end
+    HUD:Shake(3, 0.18)
+end
+
+-- An ordinary hit: a small number, ink-outlined and a little tilted like a comic, that drifts up
+-- and fades just right of the HUD, below the word bursts. Kept modest on purpose.
+local hitSlot = 0
+function Show.Hit(amount)
+    hitSlot = hitSlot % 4 + 1
+    local x = 150 + hitSlot * 12 + math.random() * 10
+    local y = 70 + (hitSlot % 2) * 12
+    FX:Pop(amount, x, y, C.paper, 13, 16)
 end
 
 function Show.Miss(word)
@@ -557,6 +572,14 @@ function T:TargetHealth()
     end
 end
 
+-- A damage amount fit to show: a whole number, the hidden value itself (the widget can show
+-- it though we cannot read it), or nil when there is nothing to show.
+local function Amount(amount)
+    if IsSecret(amount) then return amount end
+    if type(amount) == "number" and amount > 0 then return math.floor(amount + 0.5) end
+    return nil
+end
+
 -- What just happened to the target: CRIT!, DODGED!... The game does not say who dealt the
 -- hit, so this is only shown when you are alone and it can only be yours.
 function T:TargetHit(action, flag, amount)
@@ -565,11 +588,10 @@ function T:TargetHit(action, flag, amount)
     if action == "WOUND" then
         if not IsSecret(flag) and flag == "CRITICAL" and now - (T.lastCrit or -10) > 0.25 then
             T.lastCrit = now
-            local sub
-            if not IsSecret(amount) and type(amount) == "number" and amount > 0 then
-                sub = tostring(math.floor(amount + 0.5))
-            end
-            Show.Crit(sub)
+            Show.Crit(Amount(amount))
+        elseif K.db.dmg and (IsSecret(flag) or flag ~= "CRITICAL") then
+            local n = Amount(amount)
+            if n ~= nil then Show.Hit(n) end
         end
     else
         local word = MISSES[action]

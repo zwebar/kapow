@@ -134,9 +134,15 @@ function FX:Word(text, o)
     f.text:SetTextColor(tc[1], tc[2], tc[3])
 
     if o.sub then
-        SetFontSize(f.sub, math.floor(17 * math.max(size, 0.9) + 0.5), "OUTLINE")
-        f.sub:SetText(o.sub)
-        f.sub:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
+        SetFontSize(f.sub, math.floor((o.subSize or 17) * math.max(size, 0.9) + 0.5), o.subFlags or "OUTLINE")
+        if type(o.sub) == "string" then
+            f.sub:SetText(o.sub)
+        else
+            -- a number, possibly hidden from us in combat: the widget can still show it
+            f.sub:SetFormattedText("%d", o.sub)
+        end
+        local sc = o.subColor or C.paper
+        f.sub:SetTextColor(sc[1], sc[2], sc[3])
         f.sub:Show()
     else
         f.sub:Hide()
@@ -237,8 +243,14 @@ function FX:Pop(text, x, y, color, size, rise)
     size = size or 14
     SetFontSize(f.text, size)
     SetFontSize(f.back, size)
-    f.text:SetText(text)
-    f.back:SetText(text)
+    if type(text) == "string" then
+        f.text:SetText(text)
+        f.back:SetText(text)
+    else
+        -- a number, possibly hidden from us in combat: the widget can still show it
+        f.text:SetFormattedText("%d", text)
+        f.back:SetFormattedText("%d", text)
+    end
     color = color or C.white
     f.text:SetTextColor(color[1], color[2], color[3])
     local tilt = (math.random() * 2 - 1) * 0.1

@@ -70,7 +70,11 @@ function Demo:Run()
     end)
     at(1.0, function() tick(20) end) -- (at full: nothing to gain, the runner just laps)
     at(2.0, function() spend(45); points(3); cast("sinister") end)
-    at(2.3, function() T.Show.Crit("187") end)
+    at(2.3, function() T.Show.Crit(187) end)
+    -- ordinary hits: small numbers
+    for i, t in ipairs({ 1.4, 3.3, 4.7, 6.6, 8.4, 9.8, 11.7 }) do
+        at(t, function() T.Show.Hit(({ 54, 61, 48, 96, 57, 63, 112 })[i]) end)
+    end
     at(2.7, function() HUD:Error() end)
     at(3.0, function() tick(20) end)
     at(3.5, function()
