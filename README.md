@@ -13,12 +13,13 @@ for everything you do.
   (nameplates off, or hidden from addons), the pips show on the HUD instead.
 - **Ability bursts** – `SLASH!`, `STAB!`, `AMBUSH!`, `GOUGE!`, `KICK!`, `SAP! z z z`, `POOF!`…
   Finishers grow with the points spent (`EVISCERATE! 5 POINTS`). Bursts pop up to the left and
-  right of the HUD, never over the middle of the screen.
+  right, a little above the HUD: never over the middle of the screen or the unit frames.
 - **Hits** (solo only) – `CRIT!` with the number, `DODGED!`, `PARRIED!`, `MISS!`, and `K.O.!`
   when the target drops.
 - **Kick** – `KICK IT!` flashes while your target is casting something you can kick. With Kick
   on cooldown it suggests `GOUGE IT!` or `KIDNEY SHOT!` instead, and if none of them is ready it
-  stays up, dimmed, counting down (`KICK IN 3`) so you still see what is coming. The box shows the spell's icon and name and how far along the cast is; it turns green
+  stays up, dimmed, counting down (`KICK IN 3`) so you still see what is coming. The box is a comic cast bar: a caption tab says what to do, and the bar shows the
+  spell's icon and name and fills as the cast goes on; it turns green
   with a `HEAL!` tag when the spell is a heal (`BUFF!` for other helpful spells). `DENIED!` when
   your Kick, Gouge or stun breaks the cast.
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,

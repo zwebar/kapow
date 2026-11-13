@@ -5,10 +5,10 @@ local FX = {}
 K.FX = FX
 local C = K.C
 
--- Word bursts land beside the HUD, alternating left and right, so they never cover the
--- middle of the screen where your character and your target are.
+-- Word bursts land to the left and right, a little above the HUD: clear of the middle of the
+-- screen (your character and your target) and of the unit frames lower down at the sides.
 -- Each slot: side (-1 left, 1 right), how far its inner edge sits from the HUD's centre, height.
-local WORD_SLOTS = { { -1, 186, 10 }, { 1, 194, 14 }, { -1, 204, 56 }, { 1, 212, 60 }, { -1, 190, -36 }, { 1, 196, -34 } }
+local WORD_SLOTS = { { -1, 170, 120 }, { 1, 178, 124 }, { -1, 194, 168 }, { 1, 202, 172 }, { -1, 178, 214 }, { 1, 186, 218 } }
 
 local words, pops, sprites = {}, {}, {}
 local slot, seq = 0, 0

@@ -11,7 +11,8 @@ local CELL_W, CELL_H, PITCH = 60, 30, 45
 local CELL_Y, PIP_Y = -6, 27
 local PIP = 27
 local LAG = 0.35 -- how long the pale "just spent" chunk lingers
-local PROMPT_W, PROMPT_H, PROMPT_Y = 200, 42, PIP_Y + 46
+local PROMPT_W, PROMPT_H, PROMPT_Y = 210, 28, PIP_Y + 44
+local CAP_H, CAP_OVERLAP = 22, 3 -- the caption tab, and how far it overlaps the bar
 local NUM_EVERY = 0.25 -- while energy regenerates, the number changes at most this often
 local NUM_FAST = 0.5 -- after you spend, it follows every change for this long
 
@@ -188,53 +189,74 @@ function HUD:Build()
     full:Hide()
     self.fullBadge = full
 
-    -- Prompt box: KICK IT!, with what the target is casting (icon, name, how far along)
-    -- and a HEAL! tag when it is a heal.
-    local prompt = K.Panel(body, PROMPT_W, PROMPT_H)
+    -- Prompt: a comic cast bar. A yellow caption tab on top says what to do (KICK IT!); the bar
+    -- below carries the spell's icon and name and fills as the cast goes on; a HEAL! burst sits
+    -- on its right end when the spell is a heal.
+    local prompt = CreateFrame("Frame", nil, body)
+    prompt:SetSize(PROMPT_W, PROMPT_H + CAP_H - CAP_OVERLAP)
     prompt:SetPoint("CENTER", body, "CENTER", 0, PROMPT_Y)
     prompt:SetFrameLevel(base + 10)
-    prompt.bg:SetColorTexture(1, 1, 1, 1)
-    K.Tint(prompt.bg, C.red)
-    local iconInk = prompt:CreateTexture(nil, "BORDER")
+
+    local bar = K.Panel(prompt, PROMPT_W, PROMPT_H)
+    bar:SetPoint("BOTTOM", prompt, "BOTTOM", 0, 0)
+    bar:SetFrameLevel(base + 10)
+    bar.bg:SetColorTexture(1, 1, 1, 1)
+    K.Tint(bar.bg, C.red)
+    prompt.body = bar
+
+    -- the cast's progress: a lighter sweep across the bar
+    local fill = CreateFrame("StatusBar", nil, bar)
+    fill:SetPoint("TOPLEFT", bar, "TOPLEFT", PROMPT_H, -2)
+    fill:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -2, 2)
+    fill:SetFrameLevel(base + 11)
+    fill:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    fill:SetStatusBarColor(1, 1, 1, 0.28)
+    fill:SetMinMaxValues(0, 1)
+    fill:Hide()
+    prompt.bar = fill
+
+    local face = CreateFrame("Frame", nil, bar)
+    face:SetAllPoints(bar)
+    face:SetFrameLevel(base + 12)
+    local iconInk = face:CreateTexture(nil, "BORDER")
     iconInk:SetColorTexture(C.ink[1], C.ink[2], C.ink[3], 1)
-    iconInk:SetSize(PROMPT_H - 4, PROMPT_H - 4)
-    iconInk:SetPoint("LEFT", 2, 0)
-    prompt.icon = prompt:CreateTexture(nil, "ARTWORK")
-    prompt.icon:SetSize(PROMPT_H - 8, PROMPT_H - 8)
+    iconInk:SetSize(PROMPT_H, PROMPT_H)
+    iconInk:SetPoint("LEFT", bar, "LEFT", 0, 0)
+    prompt.icon = face:CreateTexture(nil, "ARTWORK")
+    prompt.icon:SetSize(PROMPT_H - 4, PROMPT_H - 4)
     prompt.icon:SetPoint("CENTER", iconInk, "CENTER", 0, 0)
     prompt.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    prompt.text = K.Text(prompt, "OVERLAY", 17, "OUTLINE")
-    prompt.text:SetPoint("TOPLEFT", iconInk, "TOPRIGHT", 6, 1)
-    prompt.text:SetTextColor(1, 1, 1)
-    prompt.spell = K.Text(prompt, "OVERLAY", 13, "OUTLINE")
-    prompt.spell:SetPoint("BOTTOMLEFT", iconInk, "BOTTOMRIGHT", 6, 5)
-    prompt.spell:SetWidth(PROMPT_W - PROMPT_H - 14)
+    prompt.spell = K.Text(face, "OVERLAY", 15, "OUTLINE")
+    prompt.spell:SetPoint("LEFT", iconInk, "RIGHT", 7, 0)
+    prompt.spell:SetWidth(PROMPT_W - PROMPT_H - 60) -- room for the tag on the right
     prompt.spell:SetJustifyH("LEFT")
     prompt.spell:SetWordWrap(false)
-    prompt.spell:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
-    local bar = CreateFrame("StatusBar", nil, prompt)
-    bar:SetPoint("BOTTOMLEFT", iconInk, "BOTTOMRIGHT", 0, 0)
-    bar:SetPoint("BOTTOMRIGHT", prompt, "BOTTOMRIGHT", -2, 2)
-    bar:SetHeight(4)
-    local track = bar:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints()
-    track:SetColorTexture(C.ink[1], C.ink[2], C.ink[3], 0.55)
-    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetStatusBarColor(C.paper[1], C.paper[2], C.paper[3], 0.9)
-    bar:SetMinMaxValues(0, 1)
-    bar:Hide()
-    prompt.bar = bar
+    prompt.spell:SetTextColor(1, 1, 1)
+
+    -- caption tab, overlapping the bar's top edge on the left
+    local cap = K.Panel(prompt, 80, CAP_H)
+    cap:SetPoint("TOPLEFT", prompt, "TOPLEFT", PROMPT_H - 6, 0)
+    cap:SetFrameLevel(base + 14)
+    cap.bg:SetColorTexture(1, 1, 1, 1)
+    K.Tint(cap.bg, C.yellow)
+    cap.text = K.Text(cap, "OVERLAY", 15, "")
+    cap.text:SetPoint("CENTER", 0, 0)
+    cap.text:SetTextColor(C.ink[1], C.ink[2], C.ink[3])
+    cap.text:SetRotation(0.04)
+    prompt.cap = cap
+    prompt.text = cap.text
+
     local tag = CreateFrame("Frame", nil, prompt)
     tag:SetSize(10, 10)
-    tag:SetPoint("CENTER", prompt, "TOPRIGHT", -14, 1)
-    tag:SetFrameLevel(base + 12)
-    tag.shadow = K.Tex(tag, "BACKGROUND", "burst2", 70, 46)
+    tag:SetPoint("CENTER", bar, "RIGHT", -16, 1)
+    tag:SetFrameLevel(base + 15)
+    tag.shadow = K.Tex(tag, "BACKGROUND", "burst2", 74, 50)
     tag.shadow:SetPoint("CENTER", 3, -3)
     tag.shadow:SetVertexColor(0, 0, 0, 0.5)
-    tag.shape = K.Tex(tag, "BORDER", "burst2", 70, 46)
+    tag.shape = K.Tex(tag, "BORDER", "burst2", 74, 50)
     tag.shape:SetPoint("CENTER")
     K.Tint(tag.shape, C.yellow)
-    tag.text = K.Text(tag, "OVERLAY", 13, "OUTLINE")
+    tag.text = K.Text(tag, "OVERLAY", 16, "OUTLINE")
     tag.text:SetPoint("CENTER", 0, 0)
     tag.text:SetRotation(-0.12)
     tag:Hide()
@@ -489,11 +511,8 @@ function HUD:SetPrompt(text, cast, mode)
     local IsSecret = K.IsSecret
 
     prompt.text:SetText(text)
-    if mode == "go" then
-        prompt.text:SetTextColor(1, 1, 1)
-    else
-        prompt.text:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
-    end
+    prompt.cap:SetWidth(math.max(64, (prompt.text:GetStringWidth() or 60) + 16))
+    K.Tint(prompt.cap.bg, mode == "go" and C.yellow or C.grey)
     if IsSecret(cast.name) or cast.name ~= nil then
         prompt.spell:SetText(cast.name)
     else
@@ -513,7 +532,7 @@ function HUD:SetPrompt(text, cast, mode)
         tag.text:SetTextColor(C.red[1], C.red[2], C.red[3])
         tag:Show()
         tag:SetAlphaFromBoolean(cast.helpful, 1, 0)
-        prompt.bg:SetVertexColorFromBoolean(cast.helpful, Color(C.teal), Color(C.red))
+        prompt.body.bg:SetVertexColorFromBoolean(cast.helpful, Color(C.teal), Color(C.red))
     else
         local label = (cast.heal and "HEAL!") or (cast.helpful and "BUFF!") or nil
         tag:SetAlpha(1)
@@ -523,7 +542,7 @@ function HUD:SetPrompt(text, cast, mode)
             tag.text:SetText(label)
             tag.text:SetTextColor(c[1], c[2], c[3])
         end
-        K.Tint(prompt.bg, cast.helpful and C.teal or C.red)
+        K.Tint(prompt.body.bg, cast.helpful and C.teal or C.red)
     end
 
     -- a shielded cast cannot be kicked: the box stays out of the way
