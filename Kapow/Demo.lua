@@ -92,8 +92,17 @@ function Demo:Run()
     at(5.0, function() tick(20) end)
     at(5.6, function() T.Show.Miss("DODGED!") end)
     at(6.2, function() cast("rush"); box("rush", "RUSH", "buff", 6) end)
+    at(6.5, function()
+        -- another heal, Kick still on cooldown: Gouge it instead
+        local now = GetTime() * 1000
+        HUD:SetPrompt("GOUGE IT!", {
+            name = (C_Spell and C_Spell.GetSpellName and K.Safe(C_Spell.GetSpellName, 2054)) or "Heal",
+            icon = C_Spell and C_Spell.GetSpellTexture and K.Safe(C_Spell.GetSpellTexture, 2054),
+            startMs = now, endMs = now + 3000, helpful = true, heal = true,
+        }, "go")
+    end)
     at(7.0, function() tick(40) end)
-    at(7.4, function() spend(45); points(4); cast("gouge"); box("gouge", "GOUGED", "cc", 4) end)
+    at(7.4, function() HUD:SetPrompt(nil); spend(45); points(4); cast("gouge"); box("gouge", "GOUGED", "cc", 4) end)
     at(8.2, function() FX:Pop("PARRY!", -70, HUD.PIP_Y + 28, C.cyan, 15, 18); box("riposte", "RIPOSTE!", "now", 2.5) end)
     at(9.0, function() tick(40) end)
     at(9.5, function() spend(45); points(5); cast("sinister") end)

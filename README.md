@@ -16,8 +16,9 @@ for everything you do.
   right of the HUD, never over the middle of the screen.
 - **Hits** (solo only) – `CRIT!` with the number, `DODGED!`, `PARRIED!`, `MISS!`, and `K.O.!`
   when the target drops.
-- **Kick** – `KICK IT!` flashes while your target is casting something you can kick and Kick is
-  ready. The box shows the spell's icon and name and how far along the cast is; it turns green
+- **Kick** – `KICK IT!` flashes while your target is casting something you can kick. With Kick
+  on cooldown it suggests `GOUGE IT!` or `KIDNEY SHOT!` instead, and if none of them is ready it
+  stays up, dimmed, counting down (`KICK IN 3`) so you still see what is coming. The box shows the spell's icon and name and how far along the cast is; it turns green
   with a `HEAL!` tag when the spell is a heal (`BUFF!` for other helpful spells). `DENIED!` when
   your Kick, Gouge or stun breaks the cast.
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,

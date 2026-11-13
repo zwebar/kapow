@@ -494,7 +494,16 @@ local function setup()
         local c = COSTS[NAMES[id] or ""]
         return c and { { type = Enum.PowerType.Energy, cost = c, minCost = c, name = "ENERGY" } } or {}
     end)
-    defineNS("C_Spell", "IsSpellUsable", function(id) return G.energy >= (COSTS[NAMES[id] or ""] or 0), false end)
+    local FINISHERS = { Eviscerate = true, ["Kidney Shot"] = true, ["Slice and Dice"] = true, Rupture = true }
+    local BYNAME = {}
+    for id, n in pairs(NAMES) do BYNAME[n] = BYNAME[n] or id end
+    defineNS("C_Spell", "IsSpellUsable", function(id)
+        local name = type(id) == "string" and id or NAMES[id]
+        if not name or not BYNAME[name] then return false, false end -- not a spell you know
+        if FINISHERS[name] and (G.cp or 0) == 0 then return false, false end
+        local enough = G.energy >= (COSTS[name] or 0)
+        return enough, not enough
+    end)
     defineNS("C_Spell", "GetSpellCooldown", function(id)
         if G.secret then return { startTime = secret(), duration = secret(), isEnabled = secret(), modRate = 1 } end
         return { startTime = G.cdStart or clock, duration = G.cd or 0, isEnabled = true, modRate = 1 }
@@ -590,14 +599,15 @@ local function boot(class)
     spy(K.Timers, "Stop", function(key) return K.Timers:Get(key) and ("box   " .. key .. " removed") or nil end)
     spy(K.Timers, "Adjust", function(key, exp, dur) return string.format("box   %s corrected to %.1fs left", key, exp - clock) end)
     spy(K.HUD, "SetFull", function(full) if full ~= K.HUD.full then return "full  " .. tostring(full) end end)
-    spy(K.HUD, "SetPrompt", function(text, cast)
-        if text == K.HUD.promptText and cast == K.HUD.promptCast then return nil end
+    spy(K.HUD, "SetPrompt", function(text, cast, ...)
+        if text == K.HUD.promptText and cast == K.HUD.promptCast and (... or "go") == (K.HUD.promptMode or "go") then return nil end
         if not text then return K.HUD.promptText and "prompt hidden" or nil end
         local c = cast or {}
         local hidden = issecretvalue(c.name) and " [hidden from addon]" or ""
         local tag = real(c.helpful) and (c.heal == false and "BUFF!" or "HEAL!") or "-"
         local kickable = real(c.notInterruptible) and "  (box invisible: can't be kicked)" or ""
-        return string.format("prompt %s  spell=%s  tag=%s%s%s", text, tostring(real(c.name)), tag, hidden, kickable)
+        local quiet = ((...) == "wait") and "  (dim, no pulse)" or ""
+        return string.format("prompt %s  spell=%s  tag=%s%s%s%s", text, tostring(real(c.name)), tag, hidden, kickable, quiet)
     end)
     spy(K.HUD, "Tick", function(amount) return "tick  " .. str(amount) end)
     spy(K.HUD, "Spend", function(cost) return "spend " .. str(cost) end)
@@ -848,6 +858,31 @@ local function casts()
     try(168, false, false, "Frost Armor, readable")
     try(2050, true, false, "Lesser Heal, hidden")
     try(133, true, false, "Fireball, hidden")
+    log("(Kick on cooldown: Gouge instead)")
+    K.Timers:Start("cd:kick", { label = "KICK", duration = 6, kind = "cd" })
+    try(2050, false, false, "Lesser Heal, readable")
+    log("(Kick and Gouge on cooldown, 2 combo points: Kidney Shot)")
+    K.Timers:Start("cd:gouge", { label = "GOUGE", duration = 6, kind = "cd" })
+    G.cp = 2
+    fire("UNIT_POWER_UPDATE", "player", "COMBO_POINTS")
+    try(2050, false, false, "Lesser Heal, readable")
+    log("(nothing ready, no combo points: the box waits for Kick)")
+    G.cp = 0
+    fire("UNIT_POWER_UPDATE", "player", "COMBO_POINTS")
+    G.casting, G.castID, G.castAt = true, 2050, clock
+    fire("UNIT_SPELLCAST_START", "target", "Cast-9", 2050, 1)
+    step(2.4)
+    G.casting = false
+    fire("UNIT_SPELLCAST_STOP", "target", "Cast-9", 2050, 1)
+    step(3)
+    log("(Kick is back mid-cast: the box switches to KICK IT!)")
+    K.Timers:Start("cd:kick", { label = "KICK", duration = 1, kind = "cd" })
+    G.casting, G.castID, G.castAt = true, 133, clock
+    fire("UNIT_SPELLCAST_START", "target", "Cast-9", 133, 1)
+    step(1.5)
+    G.casting = false
+    fire("UNIT_SPELLCAST_STOP", "target", "Cast-9", 133, 1)
+    step(0.3)
     try(133, false, true, "shielded Fireball, readable")
     try(2050, true, true, "shielded Lesser Heal, hidden")
     G.secret, G.combat, G.target, G.castNoKick = false, false, false, false

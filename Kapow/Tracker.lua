@@ -357,19 +357,42 @@ local function ReadCast()
     return cast
 end
 
--- KICK IT! while the target is casting something that can be kicked and Kick is ready.
+-- Ways to stop a cast, best first. Gouge and Kidney Shot interrupt too.
+local STOP_WITH = { { "kick", "KICK IT!" }, { "gouge", "GOUGE IT!" }, { "kidney", "KIDNEY SHOT!" } }
+
+-- Known, off cooldown, and enough energy (and combo points, for Kidney Shot).
+local function Ready(key)
+    local def = Spells:Get(key)
+    if not def or Timers:Remaining("cd:" .. key) > 0 then return false end
+    if not (C_Spell and C_Spell.IsSpellUsable) then return false end
+    -- by name, so the highest rank you know is the one checked
+    local ok, usable = pcall(C_Spell.IsSpellUsable, def.name or def.id)
+    return ok and Bool(usable)
+end
+
+-- While the target casts something that can be stopped: KICK IT!, or with Kick on cooldown
+-- GOUGE IT! / KIDNEY SHOT!, or failing all of those a quieter "KICK IN 4" so you still see
+-- what is coming.
 function T:UpdatePrompt()
-    local show = false
+    local text, mode
     if T.casting and K.db.prompt and HUD.hasTarget then
-        local kick = Spells:Get("kick")
-        if kick and Timers:Remaining("cd:kick") <= 0 and C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, kick.id)
-            if ok and Bool(usable) then show = true end
-        end
         local cast = T.cast
-        if cast and not IsSecret(cast.notInterruptible) and cast.notInterruptible then show = false end
+        local shielded = cast and not IsSecret(cast.notInterruptible) and cast.notInterruptible
+        if not shielded then
+            for _, way in ipairs(STOP_WITH) do
+                if Ready(way[1]) then
+                    text, mode = way[2], "go"
+                    break
+                end
+            end
+            if not text and Spells:Get("kick") then
+                local wait = Timers:Remaining("cd:kick")
+                text = wait > 0 and string.format("KICK IN %d", math.ceil(wait)) or "NEED ENERGY"
+                mode = "wait"
+            end
+        end
     end
-    HUD:SetPrompt(show and "KICK IT!" or nil, show and T.cast or nil)
+    HUD:SetPrompt(text, text and T.cast or nil, mode)
 end
 
 function T:TargetCasting(on)

@@ -469,23 +469,31 @@ local QUESTION_MARK = 134400
 -- casting (Tracker's ReadCast); any part of it may be secret, so it is only handed to widgets:
 -- the name and icon are displayed, and "helpful" / "can't be interrupted" pick colours and
 -- visibility through the game's boolean setters without the addon ever reading them.
-function HUD:SetPrompt(text, cast)
+-- mode "wait" (nothing to stop it with right now) shows the box dimmer and without pulsing.
+function HUD:SetPrompt(text, cast, mode)
     local prompt = self.prompt
     if not text then
         if self.promptText then
             prompt.pulse:Stop()
             prompt:Hide()
         end
-        self.promptText, self.promptCast = nil, nil
+        self.promptText, self.promptCast, self.promptMode = nil, nil, nil
         return
     end
-    if text == self.promptText and cast == self.promptCast then return end
-    local appearing = self.promptText == nil
-    self.promptText, self.promptCast = text, cast
+    mode = mode or "go"
+    if text == self.promptText and cast == self.promptCast and mode == self.promptMode then return end
+    local nowGo = mode == "go" and self.promptMode ~= "go"
+    self.promptText, self.promptCast, self.promptMode = text, cast, mode
+    local alpha = mode == "go" and 1 or 0.8
     cast = cast or {}
     local IsSecret = K.IsSecret
 
     prompt.text:SetText(text)
+    if mode == "go" then
+        prompt.text:SetTextColor(1, 1, 1)
+    else
+        prompt.text:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
+    end
     if IsSecret(cast.name) or cast.name ~= nil then
         prompt.spell:SetText(cast.name)
     else
@@ -520,9 +528,9 @@ function HUD:SetPrompt(text, cast)
 
     -- a shielded cast cannot be kicked: the box stays out of the way
     if IsSecret(cast.notInterruptible) then
-        prompt:SetAlphaFromBoolean(cast.notInterruptible, 0, 1)
+        prompt:SetAlphaFromBoolean(cast.notInterruptible, 0, alpha)
     else
-        prompt:SetAlpha(1)
+        prompt:SetAlpha(alpha)
     end
 
     -- how far along the cast is
@@ -539,7 +547,10 @@ function HUD:SetPrompt(text, cast)
     end
 
     prompt:Show()
-    if appearing then
+    if mode ~= "go" then
+        prompt.pulse:Stop()
+    elseif nowGo then
+        -- just became something you can do: pulse and a ring to catch the eye
         prompt.pulse:Play()
         K.FX:Ring(0, PROMPT_Y, cast.helpful == true and C.teal or C.red, 50, 150, 0.3)
     end

@@ -21,7 +21,7 @@ const FENGARI = opt('fengari', path.join(ROOT, '..', 'chronicle', 'emulator', 'v
 const VERBOSE = args.includes('--verbose');
 const SNAP = opt('snap', null); // write an HTML page of rendered HUD snapshots here
 const FONT = opt('font', path.join(ROOT, 'Kapow', 'Fonts', 'Bangers-Regular.ttf'));
-const SNAP_TIMES = [0.7, 1.33, 2.42, 3.8, 4.62, 7.5, 9.58, 11.62, 12.45, 13.55];
+const SNAP_TIMES = [0.7, 1.33, 2.42, 3.8, 4.62, 6.9, 7.5, 9.58, 11.62, 12.45, 13.55];
 
 // ---------------------------------------------------------------- read the API docs
 const doc = { methods: {}, globals: {}, ns: {}, events: {}, enums: {} };
