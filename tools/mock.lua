@@ -794,7 +794,11 @@ local function boot(class)
         local c = cast or {}
         local hidden = issecretvalue(c.name) and " [hidden from addon]" or ""
         local tag = real(c.helpful) and (c.heal == false and "BUFF!" or "HEAL!") or "-"
-        local kickable = real(c.notInterruptible) and "  (box invisible: can't be kicked)" or ""
+        local kickable = ""
+        if real(c.notInterruptible) then
+            kickable = issecretvalue(c.notInterruptible) and "  (dimmed under a CAN'T KICK tab, switched by the hidden flag)"
+                or "  (dimmed: can't be kicked)"
+        end
         local quiet = ((...) == "wait") and "  (dim, no pulse)" or ""
         return string.format("prompt %s  spell=%s  tag=%s%s%s%s", text, tostring(real(c.name)), tag, hidden, kickable, quiet)
     end)
@@ -1051,7 +1055,7 @@ end
 -- What the target casts: the KICK IT! box names it and flags heals.
 local function casts()
     say("")
-    say("--- target casts (expect: name every time, HEAL!/BUFF! tags, no box for unkickable) ---")
+    say("--- target casts (expect: name every time, HEAL!/BUFF! tags, unkickable shown dimmed as CAN'T KICK) ---")
     LOG = {}
     t0 = clock
     G.target, G.dead, G.combat, G.grouped = true, false, true, false

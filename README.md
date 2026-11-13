@@ -39,7 +39,8 @@ screenshots; the grey square in the cast bar is where the spell's icon goes.</su
   stays up, dimmed, counting down (`KICK IN 3`) so you still see what is coming. The box is a comic cast bar: a caption tab says what to do, and the bar shows the
   spell's icon and name and fills as the cast goes on; it turns green
   with a `HEAL!` tag when the spell is a heal (`BUFF!` for other helpful spells). `DENIED!` when
-  your Kick, Gouge or stun breaks the cast.
+  your Kick, Gouge or stun breaks the cast. A cast that cannot be kicked still shows, dimmed,
+  under a grey `CAN'T KICK` tab. (Only your target's casts, and instant abilities have none.)
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,
   Sprint, Evasion and friends on you, and short cooldowns (`KICK 7.2`, then `KICK READY!`).
   A parry puts up a `RIPOSTE!` box.

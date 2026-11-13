@@ -219,6 +219,20 @@ function HUD:Build()
     prompt.cap = cap
     prompt.text = cap.text
 
+    -- the same tab, grey, for a cast that cannot be kicked: the bar still shows what is coming
+    local shield = K.Panel(prompt, 96, CAP_H)
+    shield:SetPoint("TOPLEFT", prompt, "TOPLEFT", PROMPT_H - 6, 0)
+    shield:SetFrameLevel(base + 14)
+    shield.bg:SetColorTexture(1, 1, 1, 1)
+    K.Tint(shield.bg, C.grey)
+    shield.text = K.Text(shield, "OVERLAY", 15, "")
+    shield.text:SetPoint("CENTER", 0, 0)
+    shield.text:SetTextColor(C.ink[1], C.ink[2], C.ink[3])
+    shield.text:SetRotation(0.04)
+    shield.text:SetText("CAN'T KICK")
+    shield:SetAlpha(0)
+    prompt.shieldCap = shield
+
     local tag = CreateFrame("Frame", nil, prompt)
     tag:SetSize(10, 10)
     tag:SetPoint("CENTER", bar, "RIGHT", -16, 1)
@@ -448,7 +462,8 @@ local QUESTION_MARK = 134400
 -- casting (Tracker's ReadCast); any part of it may be secret, so it is only handed to widgets:
 -- the name and icon are displayed, and "helpful" / "can't be interrupted" pick colours and
 -- visibility through the game's boolean setters without the addon ever reading them.
--- mode "wait" (nothing to stop it with right now) shows the box dimmer and without pulsing.
+-- mode "wait" (nothing to stop it with right now) shows the box dimmer and without pulsing;
+-- mode "shield" (it cannot be kicked) shows it dimmed under a grey CAN'T KICK tab.
 function HUD:SetPrompt(text, cast, mode)
     local prompt = self.prompt
     if not text then
@@ -502,11 +517,19 @@ function HUD:SetPrompt(text, cast, mode)
         K.Tint(prompt.body.bg, cast.helpful and C.teal or C.red)
     end
 
-    -- a shielded cast cannot be kicked: the box stays out of the way
+    -- A cast that cannot be kicked still shows, dimmed, under a grey CAN'T KICK tab. When the
+    -- game hides whether it can be kicked, the tabs and the dimming are switched by the hidden
+    -- flag itself (we never read it).
+    prompt:SetAlpha(alpha)
     if IsSecret(cast.notInterruptible) then
-        prompt:SetAlphaFromBoolean(cast.notInterruptible, 0, alpha)
+        prompt.cap:SetAlphaFromBoolean(cast.notInterruptible, 0, 1)
+        prompt.shieldCap:SetAlphaFromBoolean(cast.notInterruptible, 1, 0)
+        prompt.body:SetAlphaFromBoolean(cast.notInterruptible, 0.6, 1)
     else
-        prompt:SetAlpha(alpha)
+        local shielded = mode == "shield"
+        prompt.cap:SetAlpha(shielded and 0 or 1)
+        prompt.shieldCap:SetAlpha(shielded and 1 or 0)
+        prompt.body:SetAlpha(shielded and 0.6 or 1)
     end
 
     -- how far along the cast is

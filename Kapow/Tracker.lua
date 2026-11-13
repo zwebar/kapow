@@ -485,15 +485,17 @@ local function Ready(key)
     return ok and Bool(usable)
 end
 
--- While the target casts something that can be stopped: KICK IT!, or with Kick on cooldown
--- GOUGE IT! / KIDNEY SHOT!, or failing all of those a quieter "KICK IN 4" so you still see
--- what is coming.
+-- While the target casts: KICK IT!, or with Kick on cooldown GOUGE IT! / KIDNEY SHOT!, or
+-- failing all of those a quieter "KICK IN 4" so you still see what is coming. A cast that
+-- cannot be kicked still shows, dimmed, as CAN'T KICK.
 function T:UpdatePrompt()
     local text, mode
     if T.casting and K.db.prompt and HUD.hasTarget then
         local cast = T.cast
         local shielded = cast and not IsSecret(cast.notInterruptible) and cast.notInterruptible
-        if not shielded then
+        if shielded then
+            text, mode = "CAN'T KICK", "shield"
+        else
             for _, way in ipairs(STOP_WITH) do
                 if Ready(way[1]) then
                     text, mode = way[2], "go"
