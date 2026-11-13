@@ -11,6 +11,7 @@ local CELL_W, CELL_H, PITCH = 60, 30, 45
 local CELL_Y, PIP_Y = -6, 27
 local PIP = 27
 local LAG = 0.35 -- how long the pale "just spent" chunk lingers
+local PROMPT_W, PROMPT_H, PROMPT_Y = 200, 42, PIP_Y + 46
 local NUM_EVERY = 0.25 -- while energy regenerates, the number changes at most this often
 local NUM_FAST = 0.5 -- after you spend, it follows every change for this long
 
@@ -187,19 +188,63 @@ function HUD:Build()
     full:Hide()
     self.fullBadge = full
 
-    -- Prompt box (KICK IT!) between the pips and the word bursts
-    local prompt = K.Panel(body, 108, 26)
-    prompt:SetPoint("CENTER", body, "CENTER", 0, PIP_Y + 36)
+    -- Prompt box: KICK IT!, with what the target is casting (icon, name, how far along)
+    -- and a HEAL! tag when it is a heal.
+    local prompt = K.Panel(body, PROMPT_W, PROMPT_H)
+    prompt:SetPoint("CENTER", body, "CENTER", 0, PROMPT_Y)
     prompt:SetFrameLevel(base + 10)
-    prompt.bg:SetColorTexture(C.red[1], C.red[2], C.red[3], 1)
-    prompt.text = K.Text(prompt, "OVERLAY", 16, "OUTLINE")
-    prompt.text:SetPoint("CENTER", 0, 0)
+    prompt.bg:SetColorTexture(1, 1, 1, 1)
+    K.Tint(prompt.bg, C.red)
+    local iconInk = prompt:CreateTexture(nil, "BORDER")
+    iconInk:SetColorTexture(C.ink[1], C.ink[2], C.ink[3], 1)
+    iconInk:SetSize(PROMPT_H - 4, PROMPT_H - 4)
+    iconInk:SetPoint("LEFT", 2, 0)
+    prompt.icon = prompt:CreateTexture(nil, "ARTWORK")
+    prompt.icon:SetSize(PROMPT_H - 8, PROMPT_H - 8)
+    prompt.icon:SetPoint("CENTER", iconInk, "CENTER", 0, 0)
+    prompt.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    prompt.text = K.Text(prompt, "OVERLAY", 17, "OUTLINE")
+    prompt.text:SetPoint("TOPLEFT", iconInk, "TOPRIGHT", 6, 1)
+    prompt.text:SetTextColor(1, 1, 1)
+    prompt.spell = K.Text(prompt, "OVERLAY", 13, "OUTLINE")
+    prompt.spell:SetPoint("BOTTOMLEFT", iconInk, "BOTTOMRIGHT", 6, 5)
+    prompt.spell:SetWidth(PROMPT_W - PROMPT_H - 14)
+    prompt.spell:SetJustifyH("LEFT")
+    prompt.spell:SetWordWrap(false)
+    prompt.spell:SetTextColor(C.paper[1], C.paper[2], C.paper[3])
+    local bar = CreateFrame("StatusBar", nil, prompt)
+    bar:SetPoint("BOTTOMLEFT", iconInk, "BOTTOMRIGHT", 0, 0)
+    bar:SetPoint("BOTTOMRIGHT", prompt, "BOTTOMRIGHT", -2, 2)
+    bar:SetHeight(4)
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetColorTexture(C.ink[1], C.ink[2], C.ink[3], 0.55)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetStatusBarColor(C.paper[1], C.paper[2], C.paper[3], 0.9)
+    bar:SetMinMaxValues(0, 1)
+    bar:Hide()
+    prompt.bar = bar
+    local tag = CreateFrame("Frame", nil, prompt)
+    tag:SetSize(10, 10)
+    tag:SetPoint("CENTER", prompt, "TOPRIGHT", -14, 1)
+    tag:SetFrameLevel(base + 12)
+    tag.shadow = K.Tex(tag, "BACKGROUND", "burst2", 70, 46)
+    tag.shadow:SetPoint("CENTER", 3, -3)
+    tag.shadow:SetVertexColor(0, 0, 0, 0.5)
+    tag.shape = K.Tex(tag, "BORDER", "burst2", 70, 46)
+    tag.shape:SetPoint("CENTER")
+    K.Tint(tag.shape, C.yellow)
+    tag.text = K.Text(tag, "OVERLAY", 13, "OUTLINE")
+    tag.text:SetPoint("CENTER", 0, 0)
+    tag.text:SetRotation(-0.12)
+    tag:Hide()
+    prompt.tag = tag
     local pp = prompt:CreateAnimationGroup()
     pp:SetLooping("BOUNCE")
     local ps = pp:CreateAnimation("Scale")
-    ps:SetDuration(0.16)
+    ps:SetDuration(0.2)
     ps:SetScaleFrom(1, 1)
-    ps:SetScaleTo(1.14, 1.14)
+    ps:SetScaleTo(1.06, 1.06)
     ps:SetOrigin("CENTER", 0, 0)
     ps:SetSmoothing("IN_OUT")
     prompt.pulse = pp
@@ -414,19 +459,89 @@ function HUD:SetFull(full, celebrate)
     end
 end
 
--- A flashing red box above the pips ("KICK IT!"), or nil to hide it.
-function HUD:SetPrompt(text)
-    if text == self.promptText then return end
-    self.promptText = text
+local function Color(c)
+    if CreateColor then return CreateColor(c[1], c[2], c[3], 1) end
+    return { r = c[1], g = c[2], b = c[3], a = 1 }
+end
+local QUESTION_MARK = 134400
+
+-- The KICK IT! box above the HUD, or nil text to hide it. cast describes what the target is
+-- casting (Tracker's ReadCast); any part of it may be secret, so it is only handed to widgets:
+-- the name and icon are displayed, and "helpful" / "can't be interrupted" pick colours and
+-- visibility through the game's boolean setters without the addon ever reading them.
+function HUD:SetPrompt(text, cast)
     local prompt = self.prompt
-    if text then
-        prompt.text:SetText(text)
-        prompt:Show()
-        prompt.pulse:Play()
-        K.FX:Ring(0, PIP_Y + 36, C.red, 40, 120, 0.3)
+    if not text then
+        if self.promptText then
+            prompt.pulse:Stop()
+            prompt:Hide()
+        end
+        self.promptText, self.promptCast = nil, nil
+        return
+    end
+    if text == self.promptText and cast == self.promptCast then return end
+    local appearing = self.promptText == nil
+    self.promptText, self.promptCast = text, cast
+    cast = cast or {}
+    local IsSecret = K.IsSecret
+
+    prompt.text:SetText(text)
+    if IsSecret(cast.name) or cast.name ~= nil then
+        prompt.spell:SetText(cast.name)
     else
-        prompt.pulse:Stop()
-        prompt:Hide()
+        prompt.spell:SetText("")
+    end
+    if IsSecret(cast.icon) or cast.icon ~= nil then
+        prompt.icon:SetTexture(cast.icon)
+    else
+        prompt.icon:SetTexture(QUESTION_MARK)
+    end
+
+    -- heal or not
+    local tag = prompt.tag
+    if IsSecret(cast.helpful) then
+        -- hidden: a helpful spell cast by an enemy is all but always a heal
+        tag.text:SetText("HEAL!")
+        tag.text:SetTextColor(C.red[1], C.red[2], C.red[3])
+        tag:Show()
+        tag:SetAlphaFromBoolean(cast.helpful, 1, 0)
+        prompt.bg:SetVertexColorFromBoolean(cast.helpful, Color(C.teal), Color(C.red))
+    else
+        local label = (cast.heal and "HEAL!") or (cast.helpful and "BUFF!") or nil
+        tag:SetAlpha(1)
+        tag:SetShown(label ~= nil)
+        if label then
+            local c = cast.heal and C.red or C.purple
+            tag.text:SetText(label)
+            tag.text:SetTextColor(c[1], c[2], c[3])
+        end
+        K.Tint(prompt.bg, cast.helpful and C.teal or C.red)
+    end
+
+    -- a shielded cast cannot be kicked: the box stays out of the way
+    if IsSecret(cast.notInterruptible) then
+        prompt:SetAlphaFromBoolean(cast.notInterruptible, 0, 1)
+    else
+        prompt:SetAlpha(1)
+    end
+
+    -- how far along the cast is
+    local s, e = cast.startMs, cast.endMs
+    if not IsSecret(s) and not IsSecret(e) and type(s) == "number" and type(e) == "number" and e > s then
+        prompt.bar:SetMinMaxValues(s / 1000, e / 1000)
+        prompt.bar:SetValue(GetTime())
+        prompt.bar:Show()
+        prompt.bar.reverse = cast.channel
+        self.castBar = true
+    else
+        prompt.bar:Hide()
+        self.castBar = false
+    end
+
+    prompt:Show()
+    if appearing then
+        prompt.pulse:Play()
+        K.FX:Ring(0, PROMPT_Y, cast.helpful == true and C.teal or C.red, 50, 150, 0.3)
     end
 end
 
@@ -526,6 +641,14 @@ end
 -- Per frame
 --------------------------------------------------------------------------------
 function HUD:OnUpdate(dt, now)
+    -- the cast bar in the KICK IT! box
+    if self.castBar and self.promptText then
+        local bar = self.prompt.bar
+        local lo, hi = bar:GetMinMaxValues()
+        local v = math.min(hi, math.max(lo, now))
+        bar:SetValue(bar.reverse and (hi - (v - lo)) or v)
+    end
+
     -- the number catches up after a quiet spell
     if self.numDirty and now - (self.numAt or 0) >= NUM_EVERY then self:ShowNumber(now) end
 

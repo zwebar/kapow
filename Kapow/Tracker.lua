@@ -322,7 +322,42 @@ local function IsCasting(unit)
     return false
 end
 
--- KICK IT! while the target is casting and Kick is ready.
+local function Present(v) return IsSecret(v) or v ~= nil end
+
+-- What the target is casting, or nil. Parts the game hides stay secret: the HUD can still show
+-- the name and icon, and turn "helpful" and "can't be interrupted" into colour and visibility.
+local function ReadCast()
+    local channel = false
+    local ok, name, _, icon, startMs, endMs, _, _, notInt, spellID = pcall(UnitCastingInfo, "target")
+    if not ok or not Present(name) then
+        if not UnitChannelInfo then return nil end
+        local ok2, n, _, i, s, e, _, ni, sid = pcall(UnitChannelInfo, "target")
+        if not ok2 or not Present(n) then return nil end
+        name, icon, startMs, endMs, notInt, spellID, channel = n, i, s, e, ni, sid, true
+    end
+    local cast = { name = name, icon = icon, startMs = startMs, endMs = endMs,
+        notInterruptible = notInt, channel = channel }
+    if Present(spellID) and C_Spell and C_Spell.IsSpellHelpful then
+        local helpful = K.Safe(C_Spell.IsSpellHelpful, spellID)
+        if IsSecret(helpful) then
+            cast.helpful = helpful
+        else
+            cast.helpful = helpful and true or false
+            -- readable: a helpful spell is a heal if it says so, otherwise a buff
+            if cast.helpful then
+                local desc = C_Spell.GetSpellDescription and K.Safe(C_Spell.GetSpellDescription, spellID)
+                if type(desc) == "string" and not IsSecret(desc) and desc ~= "" then
+                    cast.heal = desc:lower():find("heal", 1, true) ~= nil
+                else
+                    cast.heal = true
+                end
+            end
+        end
+    end
+    return cast
+end
+
+-- KICK IT! while the target is casting something that can be kicked and Kick is ready.
 function T:UpdatePrompt()
     local show = false
     if T.casting and K.db.prompt and HUD.hasTarget then
@@ -331,14 +366,22 @@ function T:UpdatePrompt()
             local ok, usable = pcall(C_Spell.IsSpellUsable, kick.id)
             if ok and Bool(usable) then show = true end
         end
+        local cast = T.cast
+        if cast and not IsSecret(cast.notInterruptible) and cast.notInterruptible then show = false end
     end
-    HUD:SetPrompt(show and "KICK IT!" or nil)
+    HUD:SetPrompt(show and "KICK IT!" or nil, show and T.cast or nil)
 end
 
 function T:TargetCasting(on)
     T.casting = on
     T.castStart = on and GetTime() or nil
+    T.cast = on and ReadCast() or nil
     T:UpdatePrompt()
+end
+
+-- The cast became kickable or stopped being kickable.
+function T:CastChanged()
+    if T.casting then T:TargetCasting(true) end
 end
 
 -- by: who broke the cast, when the game says (it may be missing or hidden).
@@ -368,6 +411,7 @@ function T:TargetChanged()
     T.koDone = not hostile
     T.casting = hostile and IsCasting("target")
     T.castStart = T.casting and GetTime() or nil
+    T.cast = T.casting and ReadCast() or nil
     T:UpdatePrompt()
     T:Combo(true)
     -- Countdowns keep running for the old target (that is what a sap timer is for), but
@@ -546,6 +590,8 @@ function T:Start()
     them:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "target")
     them:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "target")
     them:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "target")
+    them:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "target")
+    them:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "target")
     them:RegisterUnitEvent("UNIT_AURA", "target")
     them:RegisterUnitEvent("UNIT_HEALTH", "target")
     them:SetScript("OnEvent", function(_, event, _, _, _, by)
@@ -553,6 +599,8 @@ function T:Start()
             T:TargetCasting(true)
         elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
             T:Interrupted(by)
+        elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
+            T:CastChanged()
         elseif event == "UNIT_AURA" then
             T:RefineAuras("target")
         elseif event == "UNIT_HEALTH" then

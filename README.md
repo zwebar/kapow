@@ -16,7 +16,9 @@ for everything you do.
   right of the HUD, never over the middle of the screen.
 - **Hits** (solo only) – `CRIT!` with the number, `DODGED!`, `PARRIED!`, `MISS!`, and `K.O.!`
   when the target drops.
-- **Kick** – `KICK IT!` flashes while your target is casting and Kick is ready; `DENIED!` when
+- **Kick** – `KICK IT!` flashes while your target is casting something you can kick and Kick is
+  ready. The box shows the spell's icon and name and how far along the cast is; it turns green
+  with a `HEAL!` tag when the spell is a heal (`BUFF!` for other helpful spells). `DENIED!` when
   your Kick, Gouge or stun breaks the cast.
 - **Countdown boxes** – Sap, Gouge, Blind and stuns on the target, Slice and Dice, Rupture,
   Sprint, Evasion and friends on you, and short cooldowns (`KICK 7.2`, then `KICK READY!`).
@@ -61,6 +63,9 @@ calculated with). So:
 - The game says what happened to your target but not who did it. So in a party or raid,
   `CRIT!`/`DODGED!` and `K.O.!` are switched off, and `DENIED!` only shows when the game names
   you as the one who interrupted. Solo, they can only be yours.
+- What the target is casting may also be hidden from addons. The name and icon still show (the
+  game draws them), and the heal colour and tag are switched by the game from the hidden value;
+  in that case any helpful spell counts as a heal, and the cast bar is left out.
 
 ## Credits
 

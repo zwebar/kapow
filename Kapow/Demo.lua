@@ -73,7 +73,15 @@ function Demo:Run()
     at(2.3, function() T.Show.Crit("187") end)
     at(2.7, function() HUD:Error() end)
     at(3.0, function() tick(20) end)
-    at(3.5, function() HUD:SetPrompt("KICK IT!") end)
+    at(3.5, function()
+        -- the pretend target starts a heal
+        local now = GetTime() * 1000
+        HUD:SetPrompt("KICK IT!", {
+            name = (C_Spell and C_Spell.GetSpellName and K.Safe(C_Spell.GetSpellName, 2054)) or "Heal",
+            icon = C_Spell and C_Spell.GetSpellTexture and K.Safe(C_Spell.GetSpellTexture, 2054),
+            startMs = now, endMs = now + 3000, helpful = true, heal = true,
+        })
+    end)
     at(4.3, function()
         HUD:SetPrompt(nil)
         spend(15)

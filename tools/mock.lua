@@ -323,6 +323,18 @@ function IMPL.SetColorTexture(self, r, g, b, a)
     self.__color, self.__file = { r, g, b, a or 1 }, nil
 end
 local BLEND = { BLEND = true, ADD = true, DISABLE = true, ALPHAKEY = true, MOD = true }
+-- The boolean setters take a (possibly secret) true/false; the game applies it, the addon never
+-- learns which. Here the real value picks, so snapshots show what the player would see.
+function IMPL.SetVertexColorFromBoolean(self, v, yes, no)
+    if type(yes) ~= "table" or type(no) ~= "table" then error("SetVertexColorFromBoolean needs colours", 2) end
+    local c = real(v) and yes or no
+    self.__v.VertexColor = { c.r, c.g, c.b, c.a or 1 }
+end
+function IMPL.SetAlphaFromBoolean(self, v, yes, no)
+    num(yes, "alpha"); num(no, "alpha")
+    if yes > 1 or no > 1 then warn("SetAlphaFromBoolean given alpha above 1") end
+    self.__v.Alpha = { real(v) and yes or no }
+end
 function IMPL.SetBlendMode(self, m) if not BLEND[m] then error("blend mode " .. tostring(m), 2) end end
 function IMPL.SetRotation(self, r) num(r, "rotation") end
 function IMPL.SetTexCoord(self, a, b, c, d) num(a, "tc"); num(b, "tc"); num(c, "tc"); num(d, "tc") end
@@ -384,6 +396,7 @@ local NAMES = {
     [6770] = "Sap", [2094] = "Blind", [1856] = "Vanish", [1784] = "Stealth", [2983] = "Sprint", [5277] = "Evasion",
     [1966] = "Feint", [13877] = "Blade Flurry", [13750] = "Adrenaline Rush", [14177] = "Cold Blood",
     [14185] = "Preparation", [1725] = "Distract", [921] = "Pick Pocket", [6603] = "Attack",
+    [133] = "Fireball", [2050] = "Lesser Heal", [2054] = "Heal", [168] = "Frost Armor",
 }
 local COSTS = { ["Sinister Strike"] = 45, ["Cheap Shot"] = 60, Eviscerate = 35, Kick = 25, Gouge = 45,
     ["Kidney Shot"] = 25, ["Slice and Dice"] = 25, Sap = 65, Rupture = 25 }
@@ -446,9 +459,34 @@ local function setup()
     define("UnitIsDead", function() return G.dead end)
     define("UnitAffectingCombat", function() return G.combat end)
     define("IsStealthed", function() return G.stealth end)
-    define("UnitCastingInfo", function()
-        if G.casting then return hide("Fireball") end
+    -- What enemies cast in these tests (spell id -> helpful?, description)
+    local CASTS = {
+        [133] = { false, "Hurls a fiery ball that causes 16 to 25 Fire damage." },
+        [2050] = { true, "Heal your target for 47 to 58." },
+        [2054] = { true, "Heal your target for 295 to 341." },
+        [168] = { true, "Increases Armor by 30 for 30 min." },
+    }
+    define("UnitCastingInfo", function(unit)
+        if unit ~= "target" or not G.casting then return nil end
+        local id = G.castID or 133
+        local function h(v) if G.secret then return secret(v) end return v end
+        local start = G.castAt or clock
+        return h(NAMES[id]), h(NAMES[id]), h(136000 + id % 100), h(start * 1000), h((start + 2.5) * 1000),
+            h(false), h("Cast-9"), h(G.castNoKick or false), h(id)
     end)
+    defineNS("C_Spell", "IsSpellHelpful", function(id)
+        local v = CASTS[real(id)] and CASTS[real(id)][1] or false
+        if issecretvalue(id) then return secret(v) end
+        return v
+    end)
+    defineNS("C_Spell", "GetSpellDescription", function(id)
+        local d = CASTS[real(id)] and CASTS[real(id)][2] or ""
+        if issecretvalue(id) then return secret(d) end
+        return d
+    end)
+    CreateColor = function(r, g, b, a)
+        return { r = r, g = g, b = b, a = a, GetRGBA = function(c) return c.r, c.g, c.b, c.a end }
+    end
     define("UnitChannelInfo", function() return nil end)
     defineNS("C_Spell", "GetSpellName", function(id) return NAMES[id] end)
     defineNS("C_Spell", "GetSpellTexture", function(id) return NAMES[id] and 136000 + id % 100 or nil end)
@@ -552,7 +590,15 @@ local function boot(class)
     spy(K.Timers, "Stop", function(key) return K.Timers:Get(key) and ("box   " .. key .. " removed") or nil end)
     spy(K.Timers, "Adjust", function(key, exp, dur) return string.format("box   %s corrected to %.1fs left", key, exp - clock) end)
     spy(K.HUD, "SetFull", function(full) if full ~= K.HUD.full then return "full  " .. tostring(full) end end)
-    spy(K.HUD, "SetPrompt", function(text) if text ~= K.HUD.promptText then return "prompt " .. tostring(text) end end)
+    spy(K.HUD, "SetPrompt", function(text, cast)
+        if text == K.HUD.promptText and cast == K.HUD.promptCast then return nil end
+        if not text then return K.HUD.promptText and "prompt hidden" or nil end
+        local c = cast or {}
+        local hidden = issecretvalue(c.name) and " [hidden from addon]" or ""
+        local tag = real(c.helpful) and (c.heal == false and "BUFF!" or "HEAL!") or "-"
+        local kickable = real(c.notInterruptible) and "  (box invisible: can't be kicked)" or ""
+        return string.format("prompt %s  spell=%s  tag=%s%s%s", text, tostring(real(c.name)), tag, hidden, kickable)
+    end)
     spy(K.HUD, "Tick", function(amount) return "tick  " .. str(amount) end)
     spy(K.HUD, "Spend", function(cost) return "spend " .. str(cost) end)
     spy(K.HUD, "SetCombo", function(n, quiet) if n ~= K.HUD.combo then return "combo " .. n .. (quiet and " (quiet)" or "") end end)
@@ -774,6 +820,40 @@ local function trickle()
     end
     G.secret, G.combat = false, false
     K.HUD.ShowNumber = orig
+end
+
+-- What the target casts: the KICK IT! box names it and flags heals.
+local function casts()
+    say("")
+    say("--- target casts (expect: name every time, HEAL!/BUFF! tags, no box for unkickable) ---")
+    LOG = {}
+    t0 = clock
+    G.target, G.dead, G.combat, G.grouped = true, false, true, false
+    G.cd = 0
+    fire("PLAYER_TARGET_CHANGED")
+    energy(100)
+    local function try(id, hidden, noKick, label)
+        log("(" .. label .. ")")
+        G.secret, G.castID, G.castNoKick, G.castAt = hidden, id, noKick, clock
+        G.casting = true
+        fire("UNIT_SPELLCAST_START", "target", "Cast-9", id, 1)
+        step(0.4)
+        if not K.HUD.prompt.__shown and not noKick then fail("no KICK IT! box for " .. label) end
+        G.casting = false
+        fire("UNIT_SPELLCAST_STOP", "target", "Cast-9", id, 1)
+        step(0.2)
+    end
+    try(133, false, false, "Fireball, readable")
+    try(2050, false, false, "Lesser Heal, readable")
+    try(168, false, false, "Frost Armor, readable")
+    try(2050, true, false, "Lesser Heal, hidden")
+    try(133, true, false, "Fireball, hidden")
+    try(133, false, true, "shielded Fireball, readable")
+    try(2050, true, true, "shielded Lesser Heal, hidden")
+    G.secret, G.combat, G.target, G.castNoKick = false, false, false, false
+    fire("PLAYER_TARGET_CHANGED")
+    step(1)
+    for _, l in ipairs(LOG) do say(l) end
 end
 
 local function slash(msg)
@@ -998,6 +1078,7 @@ boot("ROGUE")
 fight("fight, energy readable", false)
 fight("fight, energy secret in combat", true)
 grouped()
+casts()
 trickle()
 commands()
 local counts = string.format("%d frames, %d textures, %d font strings", COUNT.frames, COUNT.textures, COUNT.fontstrings)
